@@ -13,6 +13,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Color, Alignment, PatternFill, Border, Side
 import math
+import re
 
 # Variáveis globais para armazenar credenciais após seleção
 dados_selecionados = {}
@@ -27,29 +28,73 @@ def salvar_dataframe(df, nome):
         df.to_excel(output_path, index=False)
         exibir_log(f"Arquivo {nome} salvo com Sucesso")
 
+def aplicar_estilo(output_path):
+    # Carregar a planilha salva
+    wb = load_workbook(output_path)
+    ws = wb.active
+
+    # Ajuste da largura das colunas
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter  # Pega a letra da coluna
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(cell.value)
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column].width = adjusted_width
+
+    # Preenchimento de fundo
+    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    # Estilo de alinhamento e preenchimento das células
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):  # Começa na segunda linha
+        for cell in row:
+            if cell.row % 2 == 0:
+                cell.fill = fill_grey  # Linhas pares recebem fundo cinza
+            else:
+                cell.fill = fill_white  # Linhas ímpares recebem fundo branco
+            cell.alignment = Alignment(horizontal="left", vertical="center")  # Alinhamento das células
+
+    # Aplicar bordas a todas as células
+    apply_borders(ws)
+
+    # Salvar a planilha com as formatações
+    wb.save(output_path)
+
 def abrir_popup_selecao_coleta():
     popup = ttk.Toplevel(root)
     popup.title("Selecione as funções para coletar")
     popup.geometry("300x200")
+    
+    frame_popup = ttk.Frame(popup)
+    frame_popup.pack(expand=True)
 
     # Variáveis para armazenar as seleções
     selecoes = {
         "Coletar Plan. Cadastro": [tk.BooleanVar(), coleta_empresa],
         "Coletar Justificativas": [tk.BooleanVar(), coleta_justificativa],
         "Coletar Pessoas Para Alt.": [tk.BooleanVar(), alteracao_pessoas],
-        "Coleta de Planilhas Gerais": [tk.BooleanVar(), coleta_de_planilhas],
-        "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes]
+        "Coleta de Planilha de Justificativa": [tk.BooleanVar(), coleta_de_planilhas_justificativa],
+        "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes],
+        "Planilha de Inconsistência": [tk.BooleanVar(), coleta_planilha_marcacoes_inconsistencia],
+        "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum]
     }
 
-    # Criação dinâmica dos Checkbuttons
-    for nome, (var, _) in selecoes.items():
-        ttk.Checkbutton(popup, text=nome, variable=var).pack(pady=5)
+    for i, (nome, (var, _)) in enumerate(selecoes.items()):
+        ttk.Checkbutton(frame_popup, text=nome, variable=var).grid(row=i, column=0, sticky="w", padx=10, pady=5)
 
-    # Botão de confirmação
+    # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
-        popup, text="Iniciar Coleta", 
+        frame_popup, text="Iniciar Coleta", 
         command=lambda: iniciar_coleta(selecoes, popup)
-    ).pack(pady=10)
+    ).grid(row=len(selecoes), column=0, pady=10)
+    
+    frame_popup.grid_rowconfigure(len(selecoes), weight=1)
+    frame_popup.grid_columnconfigure(0, weight=1)
 
 def envio_justificativa():
     """Função para enviar marcações para a API usando o Excel selecionado."""
@@ -117,6 +162,9 @@ def abrir_popup_selecao_pessoas():
     popup = ttk.Toplevel(root)
     popup.title("Selecione as funções para coletar")
     popup.geometry("300x200")
+    
+    frame_popup = ttk.Frame(popup)
+    frame_popup.pack(expand=True)
 
     # Variáveis para armazenar as seleções
     selecoes = {
@@ -126,14 +174,17 @@ def abrir_popup_selecao_pessoas():
     }
 
     # Criação dinâmica dos Checkbuttons
-    for nome, (var, _) in selecoes.items():
-        ttk.Checkbutton(popup, text=nome, variable=var).pack(pady=5)
+    for i, (nome, (var, _)) in enumerate(selecoes.items()):
+        ttk.Checkbutton(frame_popup, text=nome, variable=var).grid(row=i, column=0, sticky="w", padx=10, pady=5)
 
-    # Botão de confirmação
+    # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
-        popup, text="Iniciar Coleta", 
+        frame_popup, text="Iniciar Coleta", 
         command=lambda: iniciar_coleta(selecoes, popup)
-    ).pack(pady=10)
+    ).grid(row=len(selecoes), column=0, pady=10)
+    
+    frame_popup.grid_rowconfigure(len(selecoes), weight=1)
+    frame_popup.grid_columnconfigure(0, weight=1)
 
 def iniciar_coleta(selecoes, popup):
     """Inicia a coleta com base nas seleções."""
@@ -146,8 +197,7 @@ def iniciar_coleta(selecoes, popup):
 
     messagebox.showinfo("Concluido", "Função Executada com Sucesso")
 
-def coleta_de_planilhas ():
-    df1 = pd.DataFrame(columns=('Matricula', 'Data', 'Entrada', 'Almoço Ida', 'Almoço Volta', 'Saida'))
+def coleta_de_planilhas_justificativa ():
     
     df2 = pd.DataFrame(columns=('Justificativa', 'Id Funcionário', 'Data', "Hora"
     ))
@@ -158,28 +208,6 @@ def coleta_de_planilhas ():
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
         title="Salvar arquivo de marcações como"
     )
-    
-    if output_path:  # Verifica se um caminho foi selecionado
-        df1.to_excel(output_path, index=False)
-        
-        # Ajustando a largura das colunas após salvar
-        wb = load_workbook(output_path)
-        ws = wb.active
-        
-        for column in ws.columns:
-            max_length = 0
-            column = [cell for cell in column]  # Transforma a coluna em uma lista
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = (max_length + 2)  # +2 para um pouco de espaçamento
-            ws.column_dimensions[column[0].column_letter].width = adjusted_width
-            
-        wb.save(output_path)
-        wb.close()
     
     output_path1 = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
@@ -225,17 +253,254 @@ def apply_borders(ws):
         for cell in row:
             cell.border = thin_border
 
-# Função para gerar todas as datas no intervalo definido
 def generate_date_range(start_date, end_date):
     return pd.date_range(start=start_date, end=end_date)
 
-# Função para remover o dia da semana da data no JSON
 def clean_json_date(date_str):
         # Remove o dia da semana (últimos 3 caracteres)
     return date_str[:10]
 
-def coleta_planilha_marcacoes():
+def filtra_marcacoes_impares_e_htrab_vazio(entradas):
+    marcacoes_impares = []
+
+    marcacoes_filtradas = []
+
+    for entrada in entradas:
+        apontamentos = entrada.get("Apontamentos", "").strip()
+        htrab = entrada.get("HTrab", "").strip()
+        
+        # Verifica se o campo HTrab está vazio e se o número de apontamentos é ímpar
+        if not htrab and apontamentos:
+            # Divide os apontamentos usando o espaço como delimitador
+            intervals = apontamentos.split()
+            
+            # Verifica se o número de intervalos é ímpar
+            if len(intervals) % 2 != 0:
+                marcacoes_filtradas.append(entrada)
+
+    return marcacoes_filtradas
+
+def coleta_planilha_marcacoes_inconsistencia():
+    output_path = filedialog.asksaveasfilename(
+                    defaultextension=".xlsx",
+                    filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                    title="Salvar arquivo como"
+                    )
     
+    url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    
+    headers = {
+            "identifier": dados_selecionados["CNPJ"],
+            "key": dados_selecionados["Chave API"],
+            'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+
+    payload = {
+            "MatriculaPessoa": [],
+            "DataInicio": dados_selecionados["Data Início"],
+            "DataFim": dados_selecionados["Data fim"],
+            "ResponseType": "AS400V1"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            if "Obj" in data and isinstance(data['Obj'], list):
+                all_entries = []
+                
+                for item in data['Obj']:
+                    fixed_data = {
+                        'Empresa': item['InfoEmpresa']['Nome'],
+                        'Funcionario': item['InfoFuncionario']['Nome'],
+                        'Matricula': item['InfoFuncionario']['Matricula']
+                    }
+
+                    for entrada in item['Entradas']:
+                        data_limpa = clean_json_date(entrada['Data'])
+                        entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
+
+                        # Substituímos a chamada para filtra_marcacoes_impares pela nova função
+                        marcacoes_impares = filtra_marcacoes_impares_e_htrab_vazio([entrada])
+                        if marcacoes_impares:
+                            for marcacao in marcacoes_impares:
+                                entry_data = {
+                                    'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
+                                    'Horario': marcacao['Horario'],
+                                    'Apontamentos': marcacao['Apontamentos']
+                                }
+                                # Combina dados fixos e dados filtrados e os adiciona ao DataFrame
+                                combined_data = {**fixed_data, **entry_data}
+                                all_entries.append(combined_data)
+
+                # Verifica se há entradas antes de criar o DataFrame
+                if all_entries:
+                    final_df = pd.DataFrame(all_entries)
+
+                    final_df['Entrada'] = ''
+                    final_df['Almoço Ida'] = ''
+                    final_df['Almoço Volta'] = ''
+                    final_df['Saida'] = ''
+                    
+                    final_df.to_excel(output_path, index=False)
+                    
+                    wb = load_workbook(output_path)
+                    ws = wb.active
+
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(cell.value)
+                            except:
+                                pass
+                        adjusted_width = (max_length + 2)
+                        ws.column_dimensions[column].width = adjusted_width
+
+                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                    
+                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                        for cell in row:
+                            if cell.row % 2 == 0:
+                                cell.fill = fill_grey
+                            else:
+                                cell.fill = fill_white
+                            cell.alignment = Alignment(horizontal="left", vertical="center")
+                            
+                    apply_borders(ws)
+                    wb.save(output_path)
+                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                else:
+                    print("Nenhuma marcação ímpar com HTrab vazio encontrada no período.")
+            else:
+                print("Nenhum dado no campo 'Obj'.")
+        except ValueError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+            print("Conteúdo da resposta:")
+            print(response.text)
+    else:
+        print(f"Falha: {response.status_code}")
+        print(response.text)
+
+    exibir_log(f'Planilha de Marcação salva em {output_path}')
+    print(payload)
+
+def process_incomum(df):
+    incomuns = pd.DataFrame(columns=df.columns)
+
+    for index, row in df.iterrows():
+        apontamentos = row['Apontamentos']
+        apontamentos_parts = re.findall(r'\d{2}:\d{2}', str(apontamentos))
+
+        horario = row['Horario']
+        horario_parts = re.findall(r'\d{2}:\d{2}', str(horario))
+
+        if len(apontamentos_parts) > 0 and len(horario_parts) > 0:
+            apontamentos_length = len(apontamentos_parts)
+            horario_length = len(horario_parts)
+
+            # Verifica se o número de intervalos é par e diferente do número de horários
+            if apontamentos_length % 2 == 0 and apontamentos_length != horario_length:
+                incomuns = pd.concat([incomuns, row.to_frame().T])
+
+    # Formata a coluna de data
+    incomuns['Data'] = pd.to_datetime(incomuns['Data'], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
+    return incomuns
+
+def coleta_planilha_marcacoes_incomum():
+    output_path = filedialog.asksaveasfilename(
+                    defaultextension=".xlsx",
+                    filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                    title="Salvar arquivo como"
+                    )
+    
+    url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    
+    headers = {
+            "identifier": dados_selecionados["CNPJ"],
+            "key": dados_selecionados["Chave API"],
+            'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+
+    payload = {
+            "MatriculaPessoa": [],
+            "DataInicio": dados_selecionados["Data Início"],
+            "DataFim": dados_selecionados["Data fim"],
+            "ResponseType": "AS400V1"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            if "Obj" in data and isinstance(data['Obj'], list):
+                all_entries = []
+                
+                for item in data['Obj']:
+                    fixed_data = {
+                        'Empresa': item['InfoEmpresa']['Nome'],
+                        'Funcionario': item['InfoFuncionario']['Nome'],
+                        'Matricula': item['InfoFuncionario']['Matricula']
+                    }
+
+                    for entrada in item['Entradas']:
+                        data_limpa = clean_json_date(entrada['Data'])
+                        entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
+
+                        entry_data = {
+                            'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
+                            'Horario': entrada['Horario'],
+                            'Apontamentos': entrada['Apontamentos']
+                        }
+                        # Adiciona os dados fixos e dados da marcação
+                        combined_data = {**fixed_data, **entry_data}
+                        all_entries.append(combined_data)
+
+                # Verifica se há entradas antes de criar o DataFrame
+                if all_entries:
+                    final_df = pd.DataFrame(all_entries)
+                    
+                    final_df['Entrada'] = ''
+                    final_df['Almoço Ida'] = ''
+                    final_df['Almoço Volta'] = ''
+                    final_df['Saida'] = ''
+
+                    # Processa as marcações incomuns
+                    incomuns_df = process_incomum(final_df)
+
+                    # Se houver marcações incomuns, salva elas no arquivo
+                    if not incomuns_df.empty:
+                        # Salvar o DataFrame com as marcações incomuns em Excel
+                        incomuns_df.to_excel(output_path, index=False)
+
+                        # Aplicar o estilo no arquivo salvo
+                        aplicar_estilo(output_path)
+
+                    # Caso não haja marcações incomuns, informa ao usuário
+                    else:
+                        print("Não há marcações incomuns para salvar.")
+                    
+                else:
+                    print("Nenhuma marcação válida encontrada no período.")
+            else:
+                print("Nenhum dado no campo 'Obj'.")
+        except ValueError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+            print("Conteúdo da resposta:")
+            print(response.text)
+    else:
+        print(f"Falha: {response.status_code}")
+        print(response.text)
+
+    exibir_log(f'Planilha de Marcação (incomum) salva em {output_path}')
+    print(payload)
+    
+def coleta_planilha_marcacoes():
     
     output_path = filedialog.asksaveasfilename(
                     defaultextension=".xlsx",  # extensão padrão
@@ -370,6 +635,7 @@ def coleta_planilha_marcacoes():
         print(response.text)
     
     exibir_log(f'PLanilha de Marcação salva em {output_path}')
+    print(payload)
 
 def get_data_from_api(url, payload, headers):
     """Faz uma requisição para a API e transforma a resposta em DataFrame."""
@@ -429,21 +695,25 @@ def combinar_data_hora(data_completa, hora, tipo_marcacao=""):
             # Tenta converter no formato %H:%M
             data_hora_dt = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
             
-            # Ajusta a data para o próximo dia se for uma marcação noturna (não sendo "Entrada")
-            if tipo_marcacao != "Entrada" and data_hora_dt.hour >= 22:
-                data_hora_dt += timedelta(days=0)
-                
+            # Ajusta a data para o próximo dia se for uma marcação noturna
+            if tipo_marcacao != "Entrada":
+                if data_hora_dt.hour == 23 and data_hora_dt.minute == 59 or data_hora_dt.hour < 6:
+                    data_hora_dt += timedelta(days=1)
+                    
             return data_hora_dt.strftime("%d/%m/%Y %H:%M")
+        
         except ValueError:
             try:
                 # Caso tenha segundos, tenta remover e converter novamente
                 data_hora_dt = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M:%S")
                 
-                # Ajusta a data para o próximo dia se for uma marcação noturna (não sendo "Entrada")
-                if tipo_marcacao != "Entrada" and data_hora_dt.hour >= 22:
-                    data_hora_dt += timedelta(days=0)
-                    
+                # Ajusta a data para o próximo dia se for uma marcação noturna
+                if tipo_marcacao != "Entrada":
+                    if data_hora_dt.hour == 23 and data_hora_dt.minute == 59 or data_hora_dt.hour < 6:
+                        data_hora_dt += timedelta(days=1)
+                        
                 return data_hora_dt.strftime("%d/%m/%Y %H:%M")
+            
             except ValueError as e:
                 print(f"Erro ao converter data e hora: {e}")
                 return None
@@ -515,7 +785,7 @@ def enviar_marcacoes():
                         print(payload)
 
                     resultados.append([matricula, data_completa, mensagem])
-                    exibir_log(f"Matricula: {matricula} | Mensagem: {mensagem}")
+                    exibir_log(f"Matricula: {matricula} | Status: {status} | Mensagem: {mensagem}")
 
 def cadastrar_pessoas():
     """Cadastra pessoas na API utilizando dados do Excel."""
@@ -982,6 +1252,24 @@ def selecionar_arquivo_empresas():
         raise FileNotFoundError("Nenhum arquivo selecionado.")
     return caminho_arquivo
 
+def formatar_data(entry, new_value):
+    # Remove tudo que não for número
+    new_value = ''.join([c for c in new_value if c.isdigit()])
+    
+    # Limita a quantidade de caracteres para 8 (ddmmyyyy)
+    if len(new_value) > 8:
+        new_value = new_value[:8]
+
+    # Aplica a formatação de data dd/mm/aaaa
+    if len(new_value) > 2:
+        new_value = new_value[:2] + '/' + new_value[2:]
+    if len(new_value) > 5:
+        new_value = new_value[:5] + '/' + new_value[5:]
+
+    # Atualiza a entrada com a data formatada
+    entry.delete(0, tk.END)
+    entry.insert(0, new_value)
+
 root = ttk.Window(themename="darkly")  # ttkbootstrap com tema
 root.title("Seleção de Empresa e Envio de Marcações")
 root.iconbitmap("M-Kairos.ico")
@@ -997,45 +1285,62 @@ data_inicio_var = tk.StringVar()
 data_fim_var = tk.StringVar()
 
 frame_selecao = ttk.Frame(root, padding=10)
-frame_selecao.grid(row=0, column=0, pady=5, padx=5)
+frame_selecao.grid(row=0, column=0, pady=10, padx=10, sticky="nsew")
 root.columnconfigure(0, weight=1)
 root.rowconfigure(0, weight=1)
-frame_selecao.columnconfigure(1, weight=1)  # Permitir expansão da combobox
 
-# Interface de Seleção de Empresa
-ttk.Label(frame_selecao, text="Selecione a Razão Social:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-combo_razao_social = ttk.Combobox(frame_selecao, textvariable=razao_social_var, width=40)
+frame_campos = ttk.Frame(frame_selecao)
+frame_campos.grid(row=0, column=0, pady=10, padx=10)
+
+
+# Adicionando a Label e a Combobox para Razão Social
+ttk.Label(frame_campos, text="Selecione a Razão Social:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+combo_razao_social = ttk.Combobox(frame_campos, textvariable=razao_social_var, width=40)
 combo_razao_social['values'] = df_empresas["Razão Social"].tolist()
 combo_razao_social.grid(row=0, column=1, padx=5, pady=5)
 combo_razao_social.bind("<<ComboboxSelected>>", lambda e: preencher_detalhes())
 
-ttk.Label(frame_selecao, text="CNPJ:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-ttk.Entry(frame_selecao, textvariable=cnpj_var, state='readonly', width=40).grid(row=1, column=1, padx=5, pady=5)
+# Adicionando a Label e a Entry para CNPJ
+ttk.Label(frame_campos, text="CNPJ:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=cnpj_var, state='readonly', width=42).grid(row=1, column=1, padx=5, pady=5)
 
-ttk.Label(frame_selecao, text="Chave API:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
-ttk.Entry(frame_selecao, textvariable=chave_var, state='readonly', width=40).grid(row=2, column=1, padx=5, pady=5)
+# Adicionando a Label e a Entry para Chave API
+ttk.Label(frame_campos, text="Chave API:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=chave_var, state='readonly', width=42).grid(row=2, column=1, padx=5, pady=5)
 
-ttk.Label(frame_selecao, text="CPF Responsável:").grid(row=3, column=0, padx=5, pady=5, sticky="e")
-ttk.Entry(frame_selecao, textvariable=cpf_var, state='readonly', width=40).grid(row=3, column=1, padx=5, pady=5)
+# Adicionando a Label e a Entry para CPF Responsável
+ttk.Label(frame_campos, text="CPF Responsável:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=cpf_var, state='readonly', width=42).grid(row=3, column=1, padx=5, pady=5)
 
-ttk.Label(frame_selecao, text="Data Início:").grid(row=4, column=0, padx=5, pady=5)
-ttk.Entry(frame_selecao, textvariable=data_inicio_var, width=20).grid(row=5, column=0, padx=5, pady=5)
+# Interface de seleção de datas com formatação automática
+ttk.Label(frame_campos, text="Data Início:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
+entry_data_inicio = ttk.Entry(frame_campos, textvariable=data_inicio_var, width=10)
+entry_data_inicio.grid(row=4, column=1, padx=5, pady=5, sticky="w")
+entry_data_inicio.bind("<KeyRelease>", lambda event: formatar_data(entry_data_inicio, entry_data_inicio.get()))
 
-ttk.Label(frame_selecao, text="Data Fim:").grid(row=4, column=1, padx=5, pady=5)
-ttk.Entry(frame_selecao, textvariable=data_fim_var, width=20).grid(row=5, column=1, padx=5, pady=5)
+ttk.Label(frame_campos, text="Data Fim:").grid(row=5, column=0, padx=5, pady=5, sticky="w")
+entry_data_fim = ttk.Entry(frame_campos, textvariable=data_fim_var, width=10)
+entry_data_fim.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+entry_data_fim.bind("<KeyRelease>", lambda event: formatar_data(entry_data_fim, entry_data_fim.get()))
 
-# Botões com estilo verde usando 'success' (verde no ttkbootstrap)
-ttk.Button(frame_selecao, text="Confirmar Seleção", command=confirmar_selecao, bootstyle="success").grid(
-    row=3, column=2, columnspan=1, pady=10)
-ttk.Button(frame_selecao, text="Enviar Marcações", command=enviar_marcacoes, bootstyle="success").grid(
-    row=6, column=0, columnspan=1, pady=5, padx=5)
-ttk.Button(frame_selecao, text="Envio", command=abrir_popup_selecao_pessoas, bootstyle="success").grid(
-    row=6, column=1, columnspan=1, pady=5, padx=5)
-ttk.Button(frame_selecao, text="Coleta", command=abrir_popup_selecao_coleta, bootstyle="success").grid(
-    row=6, column=2, columnspan=1, pady=5, padx=5)
+ttk.Button(frame_campos, text="Confirmar Seleção", command=confirmar_selecao, bootstyle="success").grid(row=5, column=2, padx=5, pady=5)
 
-# Log de mensagens
-log_widget = tk.Text(frame_selecao, height=10, width=60)
-log_widget.grid(row=7, column=1, pady=5, padx=5, sticky="e")
+# Centralizando os botões
+botao_frame = ttk.Frame(frame_selecao)
+botao_frame.grid(row=6, column=0, columnspan=2, pady=15)
+ttk.Button(botao_frame, text="Enviar Marcações", command=enviar_marcacoes, bootstyle="success").grid(row=0, column=1, padx=10)
+ttk.Button(botao_frame, text="Envio", command=abrir_popup_selecao_pessoas, bootstyle="success").grid(row=0, column=2, padx=10)
+ttk.Button(botao_frame, text="Coleta", command=abrir_popup_selecao_coleta, bootstyle="success").grid(row=0, column=3, padx=10)
+
+# Ajustes para centralização geral do frame
+frame_selecao.grid_columnconfigure(0, weight=1)
+frame_selecao.grid_rowconfigure(0, weight=1)
+frame_campos.grid_columnconfigure(0, weight=1)
+frame_campos.grid_columnconfigure(1, weight=1)
+frame_campos.grid_columnconfigure(2, weight=1)
+
+# Log de mensagens centralizado e expandido
+log_widget = tk.Text(frame_selecao, height=10, width=80)
+log_widget.grid(row=7, column=0, columnspan=2, pady=15, padx=5, sticky="we")
 
 root.mainloop()
