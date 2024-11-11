@@ -314,7 +314,8 @@ def coleta_planilha_marcacoes_inconsistencia():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     for entrada in item['Entradas']:
@@ -445,7 +446,8 @@ def coleta_planilha_marcacoes_incomum():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     for entrada in item['Entradas']:
@@ -545,7 +547,8 @@ def coleta_planilha_marcacoes():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     # Cria um dicionário para armazenar as marcações por data
@@ -1272,7 +1275,7 @@ def formatar_data(entry, new_value):
 
 root = ttk.Window(themename="darkly")  # ttkbootstrap com tema
 root.title("Seleção de Empresa e Envio de Marcações")
-root.iconbitmap("M-Kairos.ico")
+root.iconbitmap("M-Comune.ico")
 
 # Carrega o arquivo de empresas
 df_empresas = pd.read_excel(selecionar_arquivo_empresas())  # Ajuste com o caminho do seu Excel

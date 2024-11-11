@@ -68,7 +68,7 @@ def aplicar_estilo(output_path):
 def abrir_popup_selecao_coleta():
     popup = ttk.Toplevel(root)
     popup.title("Selecione as funções para coletar")
-    popup.geometry("300x200")
+    popup.geometry("400x300")
     
     frame_popup = ttk.Frame(popup)
     frame_popup.pack(expand=True)
@@ -314,7 +314,8 @@ def coleta_planilha_marcacoes_inconsistencia():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     for entrada in item['Entradas']:
@@ -445,7 +446,8 @@ def coleta_planilha_marcacoes_incomum():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     for entrada in item['Entradas']:
@@ -545,7 +547,8 @@ def coleta_planilha_marcacoes():
                     fixed_data = {
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
-                        'Matricula': item['InfoFuncionario']['Matricula']
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
 
                     # Cria um dicionário para armazenar as marcações por data
