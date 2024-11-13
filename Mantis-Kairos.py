@@ -4,7 +4,8 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import StringVar
 import openpyxl
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 import pandas as pd
 import requests
 import json
@@ -78,7 +79,6 @@ def abrir_popup_selecao_coleta():
         "Coletar Plan. Cadastro": [tk.BooleanVar(), coleta_empresa],
         "Coletar Justificativas": [tk.BooleanVar(), coleta_justificativa],
         "Coletar Pessoas Para Alt.": [tk.BooleanVar(), alteracao_pessoas],
-        "Coleta de Planilha de Justificativa": [tk.BooleanVar(), coleta_de_planilhas_justificativa],
         "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes],
         "Planilha de Inconsistência": [tk.BooleanVar(), coleta_planilha_marcacoes_inconsistencia],
         "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum]
@@ -92,6 +92,8 @@ def abrir_popup_selecao_coleta():
         frame_popup, text="Iniciar Coleta", 
         command=lambda: iniciar_coleta(selecoes, popup)
     ).grid(row=len(selecoes), column=0, pady=10)
+    
+    popup.protocol("WM_DELETE_WINDOW", popup.destroy)
     
     frame_popup.grid_rowconfigure(len(selecoes), weight=1)
     frame_popup.grid_columnconfigure(0, weight=1)
@@ -197,48 +199,6 @@ def iniciar_coleta(selecoes, popup):
 
     messagebox.showinfo("Concluido", "Função Executada com Sucesso")
 
-def coleta_de_planilhas_justificativa ():
-    
-    df2 = pd.DataFrame(columns=('Justificativa', 'Id Funcionário', 'Data', "Hora"
-    ))
-    
-
-    output_path = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",  # extensão padrão
-        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo de marcações como"
-    )
-    
-    output_path1 = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",  # extensão padrão
-        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo de justificativas como"
-    )
-    
-    if output_path1:  # Verifica se um caminho foi selecionado
-        df2.to_excel(output_path1, index=False)
-
-        # Ajustando a largura das colunas após salvar
-        wb = load_workbook(output_path1)
-        ws = wb.active
-        
-        for column in ws.columns:
-            max_length = 0
-            column = [cell for cell in column]  # Transforma a coluna em uma lista
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = (max_length + 2)  # +2 para um pouco de espaçamento
-            ws.column_dimensions[column[0].column_letter].width = adjusted_width
-            
-        wb.save(output_path1)
-        wb.close()
-    
-    exibir_log(f'Planilhas salvas em {output_path}')
-
 def apply_borders(ws):
     # Define o estilo da borda
     thin_border = Border(
@@ -261,21 +221,27 @@ def clean_json_date(date_str):
     return date_str[:10]
 
 def filtra_marcacoes_impares_e_htrab_vazio(entradas):
-    marcacoes_impares = []
-
     marcacoes_filtradas = []
 
     for entrada in entradas:
         apontamentos = entrada.get("Apontamentos", "").strip()
         htrab = entrada.get("HTrab", "").strip()
         
-        # Verifica se o campo HTrab está vazio e se o número de apontamentos é ímpar
+        # Verifica se o campo HTrab está vazio e se há apontamentos
         if not htrab and apontamentos:
             # Divide os apontamentos usando o espaço como delimitador
             intervals = apontamentos.split()
             
-            # Verifica se o número de intervalos é ímpar
-            if len(intervals) % 2 != 0:
+            # Verifica cada intervalo para identificar se algum está incompleto
+            has_incomplete_turn = False
+            for interval in intervals:
+                # Verifica se o intervalo tem apenas uma marcação ou uma entrada sem saída
+                if '-' not in interval or interval.count('-') == 1 and interval.endswith('-'):
+                    has_incomplete_turn = True
+                    break
+            
+            # Se houver um turno incompleto, adiciona a entrada aos filtrados
+            if has_incomplete_turn:
                 marcacoes_filtradas.append(entrada)
 
     return marcacoes_filtradas
@@ -307,7 +273,7 @@ def coleta_planilha_marcacoes_inconsistencia():
     if response.status_code == 200:
         try:
             data = response.json()
-            if "Obj" in data and isinstance(data['Obj'], list):
+            if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
                 
                 for item in data['Obj']:
@@ -344,69 +310,53 @@ def coleta_planilha_marcacoes_inconsistencia():
                     final_df['Almoço Volta'] = ''
                     final_df['Saida'] = ''
                     
-                    final_df.to_excel(output_path, index=False)
+                    inconsistencia_df = final_df
                     
-                    wb = load_workbook(output_path)
-                    ws = wb.active
+                    # Salvar o DataFrame com as marcações inconsistentes em Excel
+                    inconsistencia_df.to_excel(output_path, index=False)
 
-                    for col in ws.columns:
-                        max_length = 0
-                        column = col[0].column_letter
-                        for cell in col:
-                            try:
-                                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-                            except:
-                                pass
-                        adjusted_width = (max_length + 2)
-                        ws.column_dimensions[column].width = adjusted_width
-
-                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                    # Aplicar o estilo no arquivo salvo
+                    aplicar_estilo(output_path)
                     
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            if cell.row % 2 == 0:
-                                cell.fill = fill_grey
-                            else:
-                                cell.fill = fill_white
-                            cell.alignment = Alignment(horizontal="left", vertical="center")
-                            
-                    apply_borders(ws)
-                    wb.save(output_path)
-                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                    exibir_log(f'Planilha de Inconsistencia salva em {output_path}')
+                    
                 else:
-                    print("Nenhuma marcação ímpar com HTrab vazio encontrada no período.")
+                    exibir_log("Nenhuma marcação válida encontrada para o período especificado.")
             else:
-                print("Nenhum dado no campo 'Obj'.")
+                exibir_log("Nenhum dado disponível no campo 'Obj'.")
         except ValueError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print("Conteúdo da resposta:")
-            print(response.text)
+            exibir_log(f"Erro ao decodificar JSON: {e}")
+            exibir_log("Conteúdo da resposta:")
+            exibir_log(response.text)
     else:
-        print(f"Falha: {response.status_code}")
-        print(response.text)
+        exibir_log(f"Falha: {response.status_code}")
+        exibir_log(response.text)
 
-    exibir_log(f'Planilha de Marcação salva em {output_path}')
-    print(payload)
+    # Caso não haja dados válidos, exibe mensagem sem tentar salvar
+    if response.status_code == 200 and ('Obj' not in data or not data['Obj']):
+        exibir_log("Não há dados válidos para salvar a planilha.")
 
 def process_incomum(df):
     incomuns = pd.DataFrame(columns=df.columns)
 
     for index, row in df.iterrows():
         apontamentos = row['Apontamentos']
-        apontamentos_parts = re.findall(r'\d{2}:\d{2}', str(apontamentos))
+        
+        # Verifica se o campo Apontamentos não está vazio
+        if not apontamentos:
+            continue
 
+        apontamentos_parts = re.findall(r'\d{2}:\d{2}', str(apontamentos))
         horario = row['Horario']
         horario_parts = re.findall(r'\d{2}:\d{2}', str(horario))
-
-        if len(apontamentos_parts) > 0 and len(horario_parts) > 0:
-            apontamentos_length = len(apontamentos_parts)
-            horario_length = len(horario_parts)
-
-            # Verifica se o número de intervalos é par e diferente do número de horários
-            if apontamentos_length % 2 == 0 and apontamentos_length != horario_length:
-                incomuns = pd.concat([incomuns, row.to_frame().T])
+        
+        # Verifica se o número de intervalos é par e diferente do número de horários, ou se há textos especiais
+        apontamentos_length = len(apontamentos_parts)
+        horario_length = len(horario_parts)
+        
+        if (apontamentos_length != horario_length or apontamentos_length > 4 or apontamentos_length < 4) or \
+           re.search(r'[A-Za-z]', str(horario)):
+            incomuns = pd.concat([incomuns, row.to_frame().T])
 
     # Formata a coluna de data
     incomuns['Data'] = pd.to_datetime(incomuns['Data'], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
@@ -439,7 +389,7 @@ def coleta_planilha_marcacoes_incomum():
     if response.status_code == 200:
         try:
             data = response.json()
-            if "Obj" in data and isinstance(data['Obj'], list):
+            if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
                 
                 for item in data['Obj']:
@@ -447,14 +397,16 @@ def coleta_planilha_marcacoes_incomum():
                         'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
                         'Matricula': item['InfoFuncionario']['Matricula'],
-                        'Estrutura': item['InfoFuncionario']['Estrutura']
+                        'Estrutura': item['InfoFuncionario']['Estrutura'],
                     }
+                    
 
                     for entrada in item['Entradas']:
                         data_limpa = clean_json_date(entrada['Data'])
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
 
                         entry_data = {
+                            'HTrab': entrada['HTrab'],
                             'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
                             'Horario': entrada['Horario'],
                             'Apontamentos': entrada['Apontamentos']
@@ -482,52 +434,54 @@ def coleta_planilha_marcacoes_incomum():
 
                         # Aplicar o estilo no arquivo salvo
                         aplicar_estilo(output_path)
-
+                        
+                        exibir_log(f'Planilha de Marcação (incomum) salva em {output_path}')
+                    
                     # Caso não haja marcações incomuns, informa ao usuário
                     else:
-                        print("Não há marcações incomuns para salvar.")
+                        exibir_log("Não há marcações incomuns para salvar.")
                     
                 else:
-                    print("Nenhuma marcação válida encontrada no período.")
+                    exibir_log("Nenhuma marcação válida encontrada para o período especificado.")
             else:
-                print("Nenhum dado no campo 'Obj'.")
+                exibir_log("Nenhum dado disponível no campo 'Obj'.")
         except ValueError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print("Conteúdo da resposta:")
-            print(response.text)
+            exibir_log(f"Erro ao decodificar JSON: {e}")
+            exibir_log("Conteúdo da resposta:")
+            exibir_log(response.text)
     else:
-        print(f"Falha: {response.status_code}")
-        print(response.text)
+        exibir_log(f"Falha: {response.status_code}")
+        exibir_log(response.text)
 
-    exibir_log(f'Planilha de Marcação (incomum) salva em {output_path}')
-    print(payload)
+    # Remove o log de salvamento se não houver dados válidos
+    if response.status_code == 200 and ('Obj' not in data or not data['Obj']):
+        exibir_log("Não há dados válidos para salvar a planilha.")
     
 def coleta_planilha_marcacoes():
-    
     output_path = filedialog.asksaveasfilename(
-                    defaultextension=".xlsx",  # extensão padrão
-                    filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-                  title="Salvar arquivo como"
-                    )
+        defaultextension=".xlsx",  # extensão padrão
+        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
+        title="Salvar arquivo como"
+    )
     
     # URL do endpoint e payload
     url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'  # Modifique para o endpoint correto
     
     # Headers da requisição
     headers = {
-            "identifier": dados_selecionados["CNPJ"],
-            "key": dados_selecionados["Chave API"],
-            'User-Agent': 'PostmanRuntime/7.30.0'
+        "identifier": dados_selecionados["CNPJ"],
+        "key": dados_selecionados["Chave API"],
+        'User-Agent': 'PostmanRuntime/7.30.0'
     }
 
     payload = {
-            "MatriculaPessoa": [],
-            "DataInicio": dados_selecionados["Data Início"],
-            "DataFim": dados_selecionados["Data fim"],
-            "ResponseType":"AS400V1"
+        "MatriculaPessoa": [],
+        "DataInicio": dados_selecionados["Data Início"],
+        "DataFim": dados_selecionados["Data fim"],
+        "ResponseType":"AS400V1"
     }
     
-    response = requests.post(url,json=payload,headers=headers)
+    response = requests.post(url, json=payload, headers=headers)
 
     if response.status_code == 200:
         try:
@@ -540,6 +494,9 @@ def coleta_planilha_marcacoes():
                 start_date = datetime.strptime(payload["DataInicio"], "%d/%m/%Y")
                 end_date = datetime.strptime(payload["DataFim"], "%d/%m/%Y")
                 full_date_range = generate_date_range(start_date, end_date)
+
+                # Carregar justificativas selecionadas
+                justificativas = carregar_justificativas()
 
                 # Itera sobre cada objeto no campo "Obj"
                 for item in data['Obj']:
@@ -584,49 +541,72 @@ def coleta_planilha_marcacoes():
                 # Converte a lista de dados em um DataFrame
                 final_df = pd.DataFrame(all_entries)
 
-                # Adiciona a nova coluna "Justificativas" com valores em branco
+                # Adiciona a nova coluna "Justificativa" com valores em branco inicialmente
+                final_df['Justificativa'] = ''
                 final_df['Entrada'] = ''
                 final_df['Almoço Ida'] = ''
                 final_df['Almoço Volta'] = ''
                 final_df['Saida'] = ''
-                
+
+                # Salva o arquivo Excel
                 final_df.to_excel(output_path, index=False)
-                
+
                 # Cria um Workbook do openpyxl
                 wb = openpyxl.load_workbook(output_path)
                 ws = wb.active
 
-                # Ajusta a largura das colunas automaticamente
-                for col in ws.columns:
-                    max_length = 0
-                    column = col[0].column_letter
-                    for cell in col:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(cell.value)
-                        except:
-                            pass
-                    adjusted_width = (max_length + 2)
-                    ws.column_dimensions[column].width = adjusted_width
+                # Criar a validação de dados para a lista de justificativas selecionadas
+                if justificativas:
+                    justificativa_str = ','.join(justificativas)  # A lista de justificativas selecionadas
+                    # Criar a validação de dados para a lista suspensa
+                    justificativa_validation = DataValidation(
+                        type='list', 
+                        formula1=f'"{justificativa_str}"', 
+                        allow_blank=True
+                    )
+                    justificativa_validation.error = 'Escolher valores da lista'
+                    justificativa_validation.errorTitle = 'Entrada Invalida'
+                    justificativa_validation.prompt = 'Selecione uma justificativa'
+                    justificativa_validation.promptTitle = 'Justificativas'
+                    
+                    # Adiciona a validação de dados na coluna "Justificativa"
+                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                    justificativa_col_letter = get_column_letter(justificativa_col_index)
+                    ws.add_data_validation(justificativa_validation)
+                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
 
-                # Formatação de cor alternada nas linhas
-                fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-                
-                for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                    for cell in row:
-                        # Alterna entre as cores
-                        if cell.row % 2 == 0:
-                            cell.fill = fill_grey
-                        else:
-                            cell.fill = fill_white
-                        cell.alignment = Alignment(horizontal="left", vertical="center")
+                    # Ajusta a largura das colunas automaticamente
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(cell.value)
+                            except:
+                                pass
+                        adjusted_width = (max_length + 2)
+                        ws.column_dimensions[column].width = adjusted_width
+
+                    # Formatação de cor alternada nas linhas
+                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                    
+                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                        for cell in row:
+                            if cell.row % 2 == 0:
+                                cell.fill = fill_grey
+                            else:
+                                cell.fill = fill_white
+                            cell.alignment = Alignment(horizontal="left", vertical="center")
                         
-                apply_borders(ws)
+                    apply_borders(ws)
 
-                # Salva o arquivo Excel com formatação
-                wb.save(output_path)
-                print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                    # Salva o arquivo Excel com formatação
+                    wb.save(output_path)
+                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                else:
+                    print("Nenhuma justificativa selecionada.")
             else:
                 print("Nenhum dado no campo 'Obj'.")
         except ValueError as e:
@@ -639,6 +619,17 @@ def coleta_planilha_marcacoes():
     
     exibir_log(f'PLanilha de Marcação salva em {output_path}')
     print(payload)
+
+def carregar_justificativas():
+    # Recupera as justificativas selecionadas do arquivo
+    try:
+        with open("justificativas_selecionadas.txt", "r") as f:
+            justificativas = f.readlines()
+            justificativas = [line.strip() for line in justificativas]  # Limpa o texto
+    except FileNotFoundError:
+        justificativas = []
+    
+    return justificativas
 
 def get_data_from_api(url, payload, headers):
     """Faz uma requisição para a API e transforma a resposta em DataFrame."""
@@ -1156,7 +1147,7 @@ def alteracao_pessoas_envio():
             if 'People_Email' in df.columns:
                 Email = row['People_Email']
                 Email = str(Email).strip() if pd.notna(Email) else None  # Converte para string e remove espaços
-                if Email == '':
+                if Email == '':  # Verifica se a string está vazia
                     Email = None  # Define como None se a string for vazia
             else:
                 Email = None  # Coluna não existe, então Email é None
@@ -1168,32 +1159,44 @@ def alteracao_pessoas_envio():
             TipoSalario = row['People_TipoSalario.Id']
             Cargo = row['People_Cargo.Id']
 
-            # Verifica e converte o PIS para string
-            Pis = None if pd.isna(Pis) else str(Pis)
+            # Verifica se o PIS está vazio ou ausente e trata como automático
+            Pis = None if pd.isna(Pis) or Pis == '' else str(Pis)
 
-            if Pis and len(Pis) == 11:
-                flag_pis = True 
-            elif Pis and len(Pis) == 12 and Pis.startswith('9'):
-                flag_pis = False  
+            # Se PIS estiver vazio ou for uma string vazia, define PIS automático
+            if Pis is None:
+                payload = {
+                    "Id": Id,
+                    "Matricula": Matricula,
+                    "Cracha": Cracha,
+                    "Nome": Nome,
+                    "DataAdmissao": DataAdm,
+                    "Rg": Rg,
+                    "Cpf": Cpf,
+                    "BaseHoras": BaseHoras,
+                    "Estrutura": {"Id": EstruturaId},
+                    "TipoFuncionario": {"Id": 1},
+                    "TipoSalario": {"Id": 101},
+                    "Sexo": Sexo,
+                    "FlagGerarNumeroPISAutomatico": True,  # Gera automaticamente o PIS
+                }
             else:
-                flag_pis = False  
-
-            # Monta o payload
-            payload = {
-                "Id": Id,
-                "Matricula": Matricula,
-                "Cracha": Cracha,
-                "Nome": Nome,
-                "DataAdmissao": DataAdm,
-                "Rg": Rg,
-                "Cpf": Cpf,
-                "BaseHoras": BaseHoras,
-                "Estrutura": {"Id": EstruturaId},
-                "TipoFuncionario": {"Id": 1},
-                "TipoSalario": {"Id": 101},
-                "FlagGerarNumeroPISAutomatico": bool(flag_pis == False),
-                "Sexo": Sexo,
-            }
+                # Caso PIS esteja preenchido, envia normalmente
+                payload = {
+                    "Id": Id,
+                    "Matricula": Matricula,
+                    "Cracha": Cracha,
+                    "Nome": Nome,
+                    "DataAdmissao": DataAdm,
+                    "Rg": Rg,
+                    "Cpf": Cpf,
+                    "BaseHoras": BaseHoras,
+                    "Estrutura": {"Id": EstruturaId},
+                    "TipoFuncionario": {"Id": 1},
+                    "TipoSalario": {"Id": 101},
+                    "Sexo": Sexo,
+                    "FlagGerarNumeroPISAutomatico": False,  # Não gera o PIS automático
+                    "Pis": Pis,  # Envia o PIS preenchido
+                }
 
             # Exclui o Email do payload se for None
             if Email is not None:
@@ -1219,7 +1222,7 @@ def alteracao_pessoas_envio():
         resultados.append([Matricula, status, mensagem])
         
         exibir_log(f"Matricula: {Matricula} | Status: {status} | Mensagem: {mensagem}")
-    
+
 def exibir_log(mensagem):
     """Exibe o log de mensagens na interface."""
     log_widget.insert(tk.END, mensagem + "\n")
@@ -1245,16 +1248,6 @@ def confirmar_selecao():
     }
     messagebox.showinfo("Sucesso", "Informações selecionadas com sucesso!")
 
-def selecionar_arquivo_empresas():
-    """Abre uma janela para o usuário selecionar o arquivo de empresas."""
-    caminho_arquivo = filedialog.askopenfilename(
-        title="Selecione o arquivo Empresas",
-        filetypes=[("Arquivos Excel", "*.xlsx")]
-    )
-    if not caminho_arquivo:
-        raise FileNotFoundError("Nenhum arquivo selecionado.")
-    return caminho_arquivo
-
 def formatar_data(entry, new_value):
     # Remove tudo que não for número
     new_value = ''.join([c for c in new_value if c.isdigit()])
@@ -1273,12 +1266,122 @@ def formatar_data(entry, new_value):
     entry.delete(0, tk.END)
     entry.insert(0, new_value)
 
+# Função para abrir o popup de seleção de justificativas
+def abrir_popup_futuro():
+    # Função para fazer a requisição à API e carregar justificativas
+    def carregar_justificativas():
+        try:
+            payload = {"Code": 0,
+            "IdType": 1202,
+            "ResponseType": "AS400V1"}
+            
+            headers = {
+            "identifier": dados_selecionados['CNPJ'],
+            "key": dados_selecionados['Chave API'],
+            'User-Agent': 'PostmanRuntime/7.30.0'
+            }
+            
+            url ='https://www.dimepkairos.com.br/RestServiceApi/Justification/GetJustification'
+            
+            response = requests.post(url, json=payload, headers=headers)  # Insira a URL do endpoint aqui
+            response.raise_for_status()
+            data = response.json()
+
+            # Limpa o frame antes de adicionar os novos checkboxes
+            for widget in frame_checkboxes.winfo_children():
+                widget.destroy()
+
+            # Adiciona os checkboxes para cada justificativa
+            for item in data.get("Obj", []):
+                var = tk.BooleanVar()
+                checkbox = ttk.Checkbutton(
+                    frame_checkboxes,
+                    text=f"{item['Description']} (ID: {item['Id']})",
+                    variable=var
+                )
+                checkbox.grid(sticky="w", padx=10, pady=5)
+                justificativas_selecionadas[item['Id']] = var
+
+        except requests.RequestException as e:
+            messagebox.showerror("Erro", f"Erro ao carregar justificativas: {e}")
+
+    # Função para gravar as justificativas selecionadas
+    def gravar_justificativas():
+        selecionadas = [id for id, var in justificativas_selecionadas.items() if var.get()]
+        
+        if not selecionadas:
+            messagebox.showwarning("Atenção", "Nenhuma justificativa selecionada.")
+            return
+        
+        # Grava as justificativas selecionadas para uso futuro (por exemplo, salvando em um arquivo ou variáveis)
+        with open("justificativas_selecionadas.txt", "w") as f:
+            for id in selecionadas:
+                f.write(f"{id}\n")
+        
+        messagebox.showinfo("Sucesso", "Justificativas selecionadas foram gravadas.")
+        popup_futuro.destroy()
+
+    # Popup e configuração inicial
+    popup_futuro = tk.Toplevel(root)
+    popup_futuro.title("Seleção de Justificativas")
+    popup_futuro.geometry("400x380")
+
+    # Canvas e scrollbar para rolar os checkboxes
+    canvas = tk.Canvas(popup_futuro)
+    scrollbar = ttk.Scrollbar(popup_futuro, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    # Frame dentro do canvas que vai conter os checkboxes
+    frame_checkboxes = ttk.Frame(canvas)
+
+    # Adiciona o frame ao canvas
+    canvas.create_window((0, 0), window=frame_checkboxes, anchor="nw")
+    
+    # Configuração do scrollbar
+    scrollbar.pack(side="right", fill="y")
+    canvas.pack(fill="both", expand=True)
+
+    # Dicionário para armazenar as variáveis de seleção das justificativas
+    justificativas_selecionadas = {}
+
+    # Carrega as justificativas da API
+    carregar_justificativas()
+
+    # Atualiza a região visível do canvas quando o conteúdo muda
+    frame_checkboxes.update_idletasks()
+    canvas.config(scrollregion=canvas.bbox("all"))
+
+    # Botão para gravar as justificativas selecionadas
+    ttk.Button(
+        popup_futuro, text="Gravar Seleção", command=gravar_justificativas, bootstyle="success"
+    ).pack(pady=10)
+
+    # Botão para fechar o popup
+    ttk.Button(
+        popup_futuro, text="Fechar", command=popup_futuro.destroy, bootstyle="danger"
+    ).pack(pady=10)
+
+def selecionar_arquivo_empresas():
+    """Abre uma janela para o usuário selecionar o arquivo de empresas."""
+    caminho_arquivo = filedialog.askopenfilename(
+        title="Selecione o arquivo Empresas",
+        filetypes=[("Arquivos Excel", "*.xlsx")]
+    )
+    if not caminho_arquivo:
+        messagebox.showwarning("Aviso", "Nenhum arquivo selecionado.")
+        return
+    
+    # Recarrega o DataFrame com o novo arquivo
+    global df_empresas
+    df_empresas = pd.read_excel(caminho_arquivo)
+
+    # Atualiza a combobox com os novos valores
+    combo_razao_social['values'] = df_empresas["Razão Social"].tolist()
+    combo_razao_social.set('')  # Limpa a seleção atual
+
 root = ttk.Window(themename="darkly")  # ttkbootstrap com tema
 root.title("Seleção de Empresa e Envio de Marcações")
 root.iconbitmap("M-Kairos.ico")
-
-# Carrega o arquivo de empresas
-df_empresas = pd.read_excel(selecionar_arquivo_empresas())  # Ajuste com o caminho do seu Excel
 
 razao_social_var = tk.StringVar()
 cnpj_var = tk.StringVar()
@@ -1299,23 +1402,24 @@ frame_campos.grid(row=0, column=0, pady=10, padx=10)
 # Adicionando a Label e a Combobox para Razão Social
 ttk.Label(frame_campos, text="Selecione a Razão Social:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
 combo_razao_social = ttk.Combobox(frame_campos, textvariable=razao_social_var, width=40)
-combo_razao_social['values'] = df_empresas["Razão Social"].tolist()
 combo_razao_social.grid(row=0, column=1, padx=5, pady=5)
 combo_razao_social.bind("<<ComboboxSelected>>", lambda e: preencher_detalhes())
 
 # Adicionando a Label e a Entry para CNPJ
 ttk.Label(frame_campos, text="CNPJ:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=cnpj_var, state='readonly', width=42).grid(row=1, column=1, padx=5, pady=5)
+ttk.Entry(frame_campos, textvariable=cnpj_var, state='readonly', width=42).grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky="w")
+
+# Botão para selecionar arquivo à direita do CNPJ
+ttk.Button(frame_campos, text="Selecionar Arquivo", command=selecionar_arquivo_empresas, width=20, bootstyle="light").grid(row=0, column=3, padx=5, pady=5)
 
 # Adicionando a Label e a Entry para Chave API
 ttk.Label(frame_campos, text="Chave API:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=chave_var, state='readonly', width=42).grid(row=2, column=1, padx=5, pady=5)
+ttk.Entry(frame_campos, textvariable=chave_var, state='readonly', width=42).grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="w")
 
 # Adicionando a Label e a Entry para CPF Responsável
 ttk.Label(frame_campos, text="CPF Responsável:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=cpf_var, state='readonly', width=42).grid(row=3, column=1, padx=5, pady=5)
+ttk.Entry(frame_campos, textvariable=cpf_var, state='readonly', width=42).grid(row=3, column=1, columnspan=3, padx=5, pady=5, sticky="w")
 
-# Interface de seleção de datas com formatação automática
 ttk.Label(frame_campos, text="Data Início:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
 entry_data_inicio = ttk.Entry(frame_campos, textvariable=data_inicio_var, width=10)
 entry_data_inicio.grid(row=4, column=1, padx=5, pady=5, sticky="w")
@@ -1326,14 +1430,19 @@ entry_data_fim = ttk.Entry(frame_campos, textvariable=data_fim_var, width=10)
 entry_data_fim.grid(row=5, column=1, padx=5, pady=5, sticky="w")
 entry_data_fim.bind("<KeyRelease>", lambda event: formatar_data(entry_data_fim, entry_data_fim.get()))
 
-ttk.Button(frame_campos, text="Confirmar Seleção", command=confirmar_selecao, bootstyle="success").grid(row=5, column=2, padx=5, pady=5)
+ttk.Button(frame_campos, text="Gravar Info", command=confirmar_selecao, width=20, bootstyle="light").grid(row=5, column=3, padx=10)
 
 # Centralizando os botões
 botao_frame = ttk.Frame(frame_selecao)
 botao_frame.grid(row=6, column=0, columnspan=2, pady=15)
-ttk.Button(botao_frame, text="Enviar Marcações", command=enviar_marcacoes, bootstyle="success").grid(row=0, column=1, padx=10)
-ttk.Button(botao_frame, text="Envio", command=abrir_popup_selecao_pessoas, bootstyle="success").grid(row=0, column=2, padx=10)
-ttk.Button(botao_frame, text="Coleta", command=abrir_popup_selecao_coleta, bootstyle="success").grid(row=0, column=3, padx=10)
+botao_width = 15  # Defina o tamanho desejado em número de caracteres
+for i in range(4):
+    botao_frame.grid_columnconfigure(i, weight=1)
+
+ttk.Button(botao_frame, text="Enviar Marcação", command=enviar_marcacoes, width=botao_width, bootstyle="success").grid(row=0, column=0, padx=10)
+ttk.Button(botao_frame, text="Envio", command=abrir_popup_selecao_pessoas, width=botao_width, bootstyle="success").grid(row=0, column=1, padx=10)
+ttk.Button(botao_frame, text="Coleta", command=abrir_popup_selecao_coleta, width=botao_width, bootstyle="success").grid(row=0, column=2, padx=10)
+ttk.Button(botao_frame, text=" Sel. Justificativa", command=abrir_popup_futuro, width=botao_width, bootstyle="success").grid(row=0, column=3, padx=10)
 
 # Ajustes para centralização geral do frame
 frame_selecao.grid_columnconfigure(0, weight=1)
@@ -1341,6 +1450,7 @@ frame_selecao.grid_rowconfigure(0, weight=1)
 frame_campos.grid_columnconfigure(0, weight=1)
 frame_campos.grid_columnconfigure(1, weight=1)
 frame_campos.grid_columnconfigure(2, weight=1)
+frame_campos.grid_columnconfigure(3, weight=1)
 
 # Log de mensagens centralizado e expandido
 log_widget = tk.Text(frame_selecao, height=10, width=80)
