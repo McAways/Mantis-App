@@ -16,7 +16,7 @@ from openpyxl.styles import Font, Color, Alignment, PatternFill, Border, Side
 import math
 import re
 
-# Variáveis globais para armazenar credenciais após seleção
+
 dados_selecionados = {}
 
 def salvar_dataframe(df, nome):
@@ -77,11 +77,11 @@ def abrir_popup_selecao_coleta():
     # Variáveis para armazenar as seleções
     selecoes = {
         "Coletar Plan. Cadastro": [tk.BooleanVar(), coleta_empresa],
-        "Coletar Justificativas": [tk.BooleanVar(), coleta_justificativa],
         "Coletar Pessoas Para Alt.": [tk.BooleanVar(), alteracao_pessoas],
         "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes],
         "Planilha de Inconsistência": [tk.BooleanVar(), coleta_planilha_marcacoes_inconsistencia],
-        "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum]
+        "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum],
+        "Planilha de Horas Faltas": [tk.BooleanVar(), coleta_planilha_marcacoes_faltantes]
     }
 
     for i, (nome, (var, _)) in enumerate(selecoes.items()):
@@ -90,7 +90,7 @@ def abrir_popup_selecao_coleta():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup)
+        command=lambda: iniciar_coleta(selecoes, popup),bootstyle="info"
     ).grid(row=len(selecoes), column=0, pady=10)
     
     popup.protocol("WM_DELETE_WINDOW", popup.destroy)
@@ -171,8 +171,7 @@ def abrir_popup_selecao_pessoas():
     # Variáveis para armazenar as seleções
     selecoes = {
         "Cadastrar Pessoas": [tk.BooleanVar(), cadastrar_pessoas],
-        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio],
-        "Envio Justificativa": [tk.BooleanVar(), envio_justificativa]
+        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio]
     }
 
     # Criação dinâmica dos Checkbuttons
@@ -182,7 +181,7 @@ def abrir_popup_selecao_pessoas():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup)
+        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info"
     ).grid(row=len(selecoes), column=0, pady=10)
     
     frame_popup.grid_rowconfigure(len(selecoes), weight=1)
@@ -219,6 +218,209 @@ def generate_date_range(start_date, end_date):
 def clean_json_date(date_str):
         # Remove o dia da semana (últimos 3 caracteres)
     return date_str[:10]
+
+def process_faltas(df):
+    faltas = pd.DataFrame(columns=df.columns)
+
+    # Itera sobre cada linha do DataFrame
+    for index, row in df.iterrows():
+        apontamentos = row['Apontamentos']
+        descontos = row['Descontos']
+        horario = row['Horario']
+        
+        # Verifica se as palavras "Falta" ou "Atraso" estão nos campos
+        if 'Falta' in str(apontamentos) or 'Atraso' in str(apontamentos) or \
+           'Falta' in str(descontos) or 'Atraso' in str(descontos):
+            faltas = pd.concat([faltas, row.to_frame().T])
+        
+        # Verifica se os Apontamentos estão ausentes e se há Horário, indicando uma falta
+        elif pd.isna(apontamentos) and pd.notna(horario):
+            faltas = pd.concat([faltas, row.to_frame().T])
+
+    # Formata a coluna de data para o formato adequado
+    faltas['Data'] = pd.to_datetime(faltas['Data'], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
+
+    return faltas
+
+def coleta_planilha_marcacoes_faltantes():
+    output_path = filedialog.asksaveasfilename(
+        defaultextension=".xlsx",  # extensão padrão
+        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
+        title="Salvar arquivo como"
+    )
+    
+    # URL do endpoint e payload
+    url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'  # Modifique para o endpoint correto
+    
+    # Headers da requisição
+    headers = {
+        "identifier": dados_selecionados["CNPJ"],
+        "key": dados_selecionados["Chave API"],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+
+    payload = {
+        "MatriculaPessoa": [],
+        "DataInicio": dados_selecionados["Data Início"],
+        "DataFim": dados_selecionados["Data fim"],
+        "ResponseType":"AS400V1"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            if "Obj" in data and isinstance(data['Obj'], list):
+                all_entries = []
+                all_fixed_data = []
+
+                # Defina o intervalo de datas do relatório
+                start_date = datetime.strptime(payload["DataInicio"], "%d/%m/%Y")
+                end_date = datetime.strptime(payload["DataFim"], "%d/%m/%Y")
+                full_date_range = generate_date_range(start_date, end_date)
+
+                # Carregar justificativas selecionadas
+                justificativas = carregar_justificativas()
+
+                # Itera sobre cada objeto no campo "Obj"
+                for item in data['Obj']:
+                    # Adiciona os dados fixos para cada funcionário
+                    fixed_data = {
+                        'Funcionario': item['InfoFuncionario']['Nome'],
+                        'PIS': item['InfoFuncionario']['PIS'],
+                        'Matricula': item['InfoFuncionario']['Matricula'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
+                    }
+
+                    # Cria um dicionário para armazenar as marcações por data
+                    entradas_por_data = {}
+                    for entrada in item['Entradas']:
+                        # Limpa a data removendo o dia da semana
+                        data_limpa = clean_json_date(entrada['Data'])
+                        # Converte a data para o formato datetime
+                        entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
+                        entradas_por_data[entrada_data_formatada] = entrada
+
+                    # Para cada data no intervalo, insere os dados ou deixa em branco
+                    for date in full_date_range:
+                        if date in entradas_por_data:
+                            entrada = entradas_por_data[date]
+                            entry_data = {
+                                'Data': date.strftime("%d/%m/%Y"),
+                                'Horario': entrada['Horario'],
+                                'Apontamentos': entrada['Apontamentos'],
+                                'HTrab': entrada['HTrab'],
+                                'Descontos': entrada['Descontos'],
+                                'Debito': entrada['Debito']
+                            }
+                        else:
+                            # Preenche com valores em branco para datas sem entrada
+                            entry_data = {
+                                'Data': date.strftime("%d/%m/%Y"),
+                                'Horario': '',
+                                'Apontamentos': ''
+                            }
+
+                        # Adiciona os dados fixos e de entrada combinados
+                        combined_data = {**fixed_data, **entry_data}
+                        all_entries.append(combined_data)
+
+                # Converte a lista de dados em um DataFrame
+                final_df = pd.DataFrame(all_entries)
+
+                # Processa as faltas, considerando o padrão de tempo
+                faltas = process_faltas(final_df)
+
+                # Exibir as faltas (pode salvar ou processar de acordo com o seu caso)
+                if not faltas.empty:
+                    print("Faltas identificadas:")
+                    print(faltas)
+                else:
+                    print("Nenhuma falta identificada.")
+
+                # Agora, substitua o DataFrame 'final_df' pelas faltas filtradas
+                final_df = faltas  # Atualizando para o DataFrame de faltas filtradas
+
+                # Adiciona a nova coluna "Justificativa" com valores em branco inicialmente
+                final_df['Justificativa'] = ''
+                final_df['Entrada'] = ''
+                final_df['Almoço Ida'] = ''
+                final_df['Almoço Volta'] = ''
+                final_df['Saida'] = ''
+                final_df['Empresa'] = item['InfoEmpresa']['Nome']
+
+                # Salva o arquivo Excel
+                final_df.to_excel(output_path, index=False)
+
+                # Cria um Workbook do openpyxl
+                wb = openpyxl.load_workbook(output_path)
+                ws = wb.active
+
+                # Criar a validação de dados para a lista de justificativas selecionadas
+                if justificativas:
+                    justificativa_str = 'Folga,' + ','.join(justificativas)  # A lista de justificativas selecionadas
+                    # Criar a validação de dados para a lista suspensa
+                    justificativa_validation = DataValidation(
+                        type='list', 
+                        formula1=f'"{justificativa_str}"', 
+                        allow_blank=True
+                    )
+                    justificativa_validation.error = 'Escolher valores da lista'
+                    justificativa_validation.errorTitle = 'Entrada Invalida'
+                    justificativa_validation.prompt = 'Selecione uma justificativa'
+                    justificativa_validation.promptTitle = 'Justificativas'
+                    
+                    # Adiciona a validação de dados na coluna "Justificativa"
+                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                    justificativa_col_letter = get_column_letter(justificativa_col_index)
+                    ws.add_data_validation(justificativa_validation)
+                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+
+                    # Ajusta a largura das colunas automaticamente
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(cell.value)
+                            except:
+                                pass
+                        adjusted_width = (max_length + 2)
+                        ws.column_dimensions[column].width = adjusted_width
+
+                    # Formatação de cor alternada nas linhas
+                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                    
+                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                        for cell in row:
+                            if cell.row % 2 == 0:
+                                cell.fill = fill_grey
+                            else:
+                                cell.fill = fill_white
+                            cell.alignment = Alignment(horizontal="left", vertical="center")
+                        
+                    apply_borders(ws)
+
+                    # Salva o arquivo Excel com formatação
+                    wb.save(output_path)
+                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                else:
+                    print("Nenhuma justificativa selecionada.")
+            else:
+                print("Nenhum dado no campo 'Obj'.")
+        except ValueError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+            print("Conteúdo da resposta:")
+            print(response.text)
+    else:
+        print(f"Falha: {response.status_code}")
+        print(response.text)
+    
+    exibir_log(f'Planilha de faltas e atrasos salva em {output_path}')
+    print(payload)
 
 def filtra_marcacoes_impares_e_htrab_vazio(entradas):
     marcacoes_filtradas = []
@@ -278,7 +480,6 @@ def coleta_planilha_marcacoes_inconsistencia():
                 
                 for item in data['Obj']:
                     fixed_data = {
-                        'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
                         'Matricula': item['InfoFuncionario']['Matricula'],
                         'Estrutura': item['InfoFuncionario']['Estrutura']
@@ -295,7 +496,10 @@ def coleta_planilha_marcacoes_inconsistencia():
                                 entry_data = {
                                     'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
                                     'Horario': marcacao['Horario'],
-                                    'Apontamentos': marcacao['Apontamentos']
+                                    'Apontamentos': marcacao['Apontamentos'],
+                                    'HTrab': entrada['HTrab'],
+                                    'Desconto': entrada['Descontos'],
+                                    'Debito': entrada['Debito']
                                 }
                                 # Combina dados fixos e dados filtrados e os adiciona ao DataFrame
                                 combined_data = {**fixed_data, **entry_data}
@@ -309,6 +513,7 @@ def coleta_planilha_marcacoes_inconsistencia():
                     final_df['Almoço Ida'] = ''
                     final_df['Almoço Volta'] = ''
                     final_df['Saida'] = ''
+                    final_df['Empresa'] = item['InfoEmpresa']['Nome']
                     
                     inconsistencia_df = final_df
                     
@@ -351,12 +556,11 @@ def process_incomum(df):
         horario_parts = re.findall(r'\d{2}:\d{2}', str(horario))
         
         # Verifica se o número de intervalos é par e diferente do número de horários, ou se há textos especiais
-        apontamentos_length = len(apontamentos_parts)
-        horario_length = len(horario_parts)
-        
-        if (apontamentos_length != horario_length or apontamentos_length > 4 or apontamentos_length < 4) or \
-           re.search(r'[A-Za-z]', str(horario)):
-            incomuns = pd.concat([incomuns, row.to_frame().T])
+        if len(apontamentos_parts) > 0 and len(horario_parts) > 0:
+            apontamentos_length = len(apontamentos_parts)
+            horario_length = len(horario_parts)
+            if apontamentos_length % 2 == 0 and apontamentos_length > 0 and apontamentos_length != horario_length:
+                incomuns = pd.concat([incomuns, row.to_frame().T])
 
     # Formata a coluna de data
     incomuns['Data'] = pd.to_datetime(incomuns['Data'], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
@@ -392,12 +596,13 @@ def coleta_planilha_marcacoes_incomum():
             if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
                 
+                justificativas = carregar_justificativas()
+                
                 for item in data['Obj']:
                     fixed_data = {
-                        'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
                         'Matricula': item['InfoFuncionario']['Matricula'],
-                        'Estrutura': item['InfoFuncionario']['Estrutura'],
+                        'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
                     
 
@@ -406,10 +611,12 @@ def coleta_planilha_marcacoes_incomum():
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
 
                         entry_data = {
-                            'HTrab': entrada['HTrab'],
                             'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
                             'Horario': entrada['Horario'],
-                            'Apontamentos': entrada['Apontamentos']
+                            'Apontamentos': entrada['Apontamentos'],
+                            'HTrab': entrada['HTrab'],
+                            'Desconto': entrada['Descontos'],
+                            'Debito': entrada['Debito']
                         }
                         # Adiciona os dados fixos e dados da marcação
                         combined_data = {**fixed_data, **entry_data}
@@ -419,25 +626,73 @@ def coleta_planilha_marcacoes_incomum():
                 if all_entries:
                     final_df = pd.DataFrame(all_entries)
                     
+                    final_df['Justificativa'] = ''
                     final_df['Entrada'] = ''
                     final_df['Almoço Ida'] = ''
                     final_df['Almoço Volta'] = ''
                     final_df['Saida'] = ''
+                    final_df['Empresa']= item['InfoEmpresa']['Nome']
 
                     # Processa as marcações incomuns
                     incomuns_df = process_incomum(final_df)
+                    
 
                     # Se houver marcações incomuns, salva elas no arquivo
                     if not incomuns_df.empty:
                         # Salvar o DataFrame com as marcações incomuns em Excel
                         incomuns_df.to_excel(output_path, index=False)
 
-                        # Aplicar o estilo no arquivo salvo
-                        aplicar_estilo(output_path)
-                        
+                        wb = openpyxl.load_workbook(output_path)
+                        ws = wb.active
+
+                        # Criar a validação de dados para a lista de justificativas selecionadas
+                        if justificativas:
+                            justificativa_str = 'Folga,' + ','.join(justificativas)  # A lista de justificativas selecionadas
+                            # Criar a validação de dados para a lista suspensa
+                            justificativa_validation = DataValidation(
+                                type='list', 
+                                formula1=f'"{justificativa_str}"', 
+                                allow_blank=True
+                            )
+                            justificativa_validation.error = 'Escolher valores da lista'
+                            justificativa_validation.errorTitle = 'Entrada Invalida'
+                            justificativa_validation.prompt = 'Selecione uma justificativa'
+                            justificativa_validation.promptTitle = 'Justificativas'
+                            
+                            # Adiciona a validação de dados na coluna "Justificativa"
+                            justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                            justificativa_col_letter = get_column_letter(justificativa_col_index)
+                            ws.add_data_validation(justificativa_validation)
+                            justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+                            
+                            # Ajusta a largura das colunas automaticamente
+                            for col in ws.columns:
+                                max_length = 0
+                                column = col[0].column_letter
+                                for cell in col:
+                                    try:
+                                        if len(str(cell.value)) > max_length:
+                                            max_length = len(cell.value)
+                                    except:
+                                        pass
+                                adjusted_width = (max_length + 2)
+                                ws.column_dimensions[column].width = adjusted_width
+
+                            # Formatação de cor alternada nas linhas
+                            fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                            fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                            
+                            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                                for cell in row:
+                                    if cell.row % 2 == 0:
+                                        cell.fill = fill_grey
+                                    else:
+                                        cell.fill = fill_white
+                                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                                    
+                        apply_borders(ws)
+                        wb.save(output_path)
                         exibir_log(f'Planilha de Marcação (incomum) salva em {output_path}')
-                    
-                    # Caso não haja marcações incomuns, informa ao usuário
                     else:
                         exibir_log("Não há marcações incomuns para salvar.")
                     
@@ -502,8 +757,8 @@ def coleta_planilha_marcacoes():
                 for item in data['Obj']:
                     # Adiciona os dados fixos para cada funcionário
                     fixed_data = {
-                        'Empresa': item['InfoEmpresa']['Nome'],
                         'Funcionario': item['InfoFuncionario']['Nome'],
+                        'PIS': item['InfoFuncionario']['PIS'],
                         'Matricula': item['InfoFuncionario']['Matricula'],
                         'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
@@ -524,7 +779,10 @@ def coleta_planilha_marcacoes():
                             entry_data = {
                                 'Data': date.strftime("%d/%m/%Y"),
                                 'Horario': entrada['Horario'],
-                                'Apontamentos': entrada['Apontamentos']
+                                'Apontamentos': entrada['Apontamentos'],
+                                'HTrab': entrada['HTrab'],
+                                'Desconto': entrada['Descontos'],
+                                'Debito': entrada['Debito']
                             }
                         else:
                             # Preenche com valores em branco para datas sem entrada
@@ -547,6 +805,7 @@ def coleta_planilha_marcacoes():
                 final_df['Almoço Ida'] = ''
                 final_df['Almoço Volta'] = ''
                 final_df['Saida'] = ''
+                final_df['Empresa'] = item['InfoEmpresa']['Nome']
 
                 # Salva o arquivo Excel
                 final_df.to_excel(output_path, index=False)
@@ -557,7 +816,7 @@ def coleta_planilha_marcacoes():
 
                 # Criar a validação de dados para a lista de justificativas selecionadas
                 if justificativas:
-                    justificativa_str = ','.join(justificativas)  # A lista de justificativas selecionadas
+                    justificativa_str = 'Folga,' + ','.join(justificativas)  # A lista de justificativas selecionadas
                     # Criar a validação de dados para a lista suspensa
                     justificativa_validation = DataValidation(
                         type='list', 
@@ -617,7 +876,7 @@ def coleta_planilha_marcacoes():
         print(f"Falha: {response.status_code}")
         print(response.text)
     
-    exibir_log(f'PLanilha de Marcação salva em {output_path}')
+    exibir_log(f'Planilha de Marcação salva em {output_path}')
     print(payload)
 
 def carregar_justificativas():
@@ -881,67 +1140,6 @@ def cadastrar_pessoas():
         resultados.append([Matricula, status, mensagem])
         
         exibir_log(f"Matricula: {Matricula} | Status: {status} | Mensagem: {mensagem}")
-        
-def coleta_justificativa():
-    url1 = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
-    url2 = 'https://www.mdcomune.com.br/RestServiceApi/Justification/GetJustification'
-    
-    payload1 = {"Matricula": 0}
-    payload2 = {"Code": 0,
-            "IdType": 1202,
-            "ResponseType": "AS400V1"}  # Modifique conforme necessário
-    
-    headers = {
-        "identifier": dados_selecionados['CNPJ'],
-        "key": dados_selecionados['Chave API'],
-        'User-Agent': 'PostmanRuntime/7.30.0'
-    }    
-    df1 = get_data_from_api(url1, payload1, headers)
-    df2 = get_data_from_api(url2, payload2, headers)
-
-
-    df1 = df1.add_prefix('People_')
-    df2 = df2.add_prefix('Just_')
-
-
-    combined_df = pd.concat([df1, df2], axis=1)
-
-
-    selected_columns = [
-    'People_Id', 'People_Matricula', 'People_Nome', 'People_Cpf',
-    'Just_Id', 'Just_Description',
-    ]
-    
-    output_path = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",  # extensão padrão
-        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo como"
-    )
-
-    # Cria um DataFrame final apenas com as colunas selecionadas
-    final_df = combined_df[selected_columns]
-    
-    final_df.to_excel(output_path, index=False)
-
-# Cria um Workbook do openpyxl
-    wb = openpyxl.load_workbook(output_path)
-    ws = wb.active
-    # Ajusta a largura das colunas automaticamente
-    for col in ws.columns:
-        max_length = 0
-    column = col[0].column_letter
-    for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-            except:
-                pass
-            
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column].width = adjusted_width
-
-    wb.save(output_path)
-    exibir_log(f'Coleta de Justificativas salva em {output_path}')
 
 def coleta_empresa():
     url1= 'https://www.mdcomune.com.br/RestServiceApi/CalculationRules/GetCalculationRulesSummary' # Cálculo
@@ -1265,25 +1463,19 @@ def formatar_data(entry, new_value):
     # Atualiza a entrada com a data formatada
     entry.delete(0, tk.END)
     entry.insert(0, new_value)
-
-# Função para abrir o popup de seleção de justificativas
-def abrir_popup_futuro():
+    
+def funcao_justificativa_get():
     # Função para fazer a requisição à API e carregar justificativas
     def carregar_justificativas():
         try:
-            payload = {"Code": 0,
-            "IdType": 1202,
-            "ResponseType": "AS400V1"}
-            
+            payload = {"Code": 0, "IdType": 1202, "ResponseType": "AS400V1"}
             headers = {
-            "identifier": dados_selecionados['CNPJ'],
-            "key": dados_selecionados['Chave API'],
-            'User-Agent': 'PostmanRuntime/7.30.0'
+                "identifier": dados_selecionados['CNPJ'],
+                "key": dados_selecionados['Chave API'],
+                'User-Agent': 'PostmanRuntime/7.30.0'
             }
-            
-            url ='https://www.mdcomune.com.br/RestServiceApi/Justification/GetJustification'
-            
-            response = requests.post(url, json=payload, headers=headers)  # Insira a URL do endpoint aqui
+            url = 'https://www.mdcomune.com.br/RestServiceApi/Justification/GetJustification'
+            response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -1300,23 +1492,29 @@ def abrir_popup_futuro():
                     variable=var
                 )
                 checkbox.grid(sticky="w", padx=10, pady=5)
-                justificativas_selecionadas[item['Id']] = var
+                justificativas_selecionadas[item['Id']] = (var, item['Description'])
 
         except requests.RequestException as e:
             messagebox.showerror("Erro", f"Erro ao carregar justificativas: {e}")
 
     # Função para gravar as justificativas selecionadas
     def gravar_justificativas():
-        selecionadas = [id for id, var in justificativas_selecionadas.items() if var.get()]
+        # Coleta os IDs e descrições das justificativas selecionadas
+        selecionadas = [(id_justificativa, descricao) for id_justificativa, (var, descricao) in justificativas_selecionadas.items() if var.get()]
         
         if not selecionadas:
             messagebox.showwarning("Atenção", "Nenhuma justificativa selecionada.")
             return
         
-        # Grava as justificativas selecionadas para uso futuro (por exemplo, salvando em um arquivo ou variáveis)
+        # Grava as descrições em um arquivo para consulta
         with open("justificativas_selecionadas.txt", "w") as f:
-            for id in selecionadas:
-                f.write(f"{id}\n")
+            for _, descricao in selecionadas:
+                f.write(f"{descricao}\n")
+        
+        # Grava IDs e descrições em um arquivo separado para envio
+        with open("justificativas_ids_descricoes.txt", "w") as f:
+            for id_justificativa, descricao in selecionadas:
+                f.write(f"{id_justificativa},{descricao}\n")
         
         messagebox.showinfo("Sucesso", "Justificativas selecionadas foram gravadas.")
         popup_futuro.destroy()
@@ -1379,7 +1577,151 @@ def selecionar_arquivo_empresas():
     combo_razao_social['values'] = df_empresas["Razão Social"].tolist()
     combo_razao_social.set('')  # Limpa a seleção atual
 
-root = ttk.Window(themename="darkly")  # ttkbootstrap com tema
+def carregar_ids_justificativas():
+    ids_justificativas = {}
+    with open("justificativas_ids_descricoes.txt", "r") as file:
+        for line in file:
+            id_just, descricao = line.strip().split(",")
+            ids_justificativas[descricao] = int(id_just)
+    return ids_justificativas
+
+def enviar_justificativa(id_funcionario, id_justificativa, descricao, data):
+    url = "https://www.mdcomune.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
+
+    headers = {
+        'identifier': dados_selecionados["CNPJ"],
+        'key': dados_selecionados["Chave API"],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+    payload = {
+        "IdJustification": id_justificativa,
+        "IdUser": '1',
+        "IdEmployee": id_funcionario,
+        "QtdHours": "09:00",
+        "Date": data,
+        "Notes" : "Enviado via API",
+        "RequestType":"1",
+        "ResponseType":"AS400V1"
+    }
+    print(f"Enviando justificativa com payload: {payload}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code == 200:
+        exibir_log(f"Justificativa enviada com sucesso para ID {id_funcionario}")
+    else:
+        exibir_log(f"Erro ao enviar justificativa para ID {id_funcionario}: {response.status_code}")
+        
+def processar_arquivo_excel():
+    # Abrir diálogo para seleção do arquivo Excel
+    caminho_excel = filedialog.askopenfilename(
+        title="Selecione o arquivo de cadastro de pessoas",
+        filetypes=[("Arquivo Excel", "*.xlsx *.xls")]
+    )
+    if not caminho_excel:
+        messagebox.showwarning("Atenção", "Nenhum arquivo selecionado.")
+        return
+    
+    # Carregar o arquivo Excel
+    workbook = openpyxl.load_workbook(caminho_excel)
+    sheet = workbook.active
+    
+    # Carregar IDs de justificativas
+    ids_justificativas = carregar_ids_justificativas()
+    
+    # Abrir diálogo para salvar o arquivo de folgas
+    caminho_folgas = filedialog.asksaveasfilename(
+        defaultextension=".txt",
+        filetypes=[("Arquivo de Texto", "*.txt")],
+        title="Selecione o local para salvar o arquivo de folgas"
+    )
+    
+    # Verificar se o usuário escolheu um local para salvar o arquivo de folgas
+    if not caminho_folgas:
+        messagebox.showwarning("Atenção", "Nenhum local de salvamento selecionado para o arquivo de folgas.")
+        return
+    
+    with open(caminho_folgas, "w") as arquivo_folgas:
+        # Processar cada linha da planilha
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            matricula = row[2]
+            descricao_justificativa = row[10]
+            data = row[4]
+            pis = row[1]
+            
+            if not descricao_justificativa:
+                continue
+            
+            # Converter data para o formato "Y-m-d" (ex: 2024-11-05)
+            if isinstance(data, datetime):
+                data_formatada = data.strftime("%Y-%m-%d")
+            else:
+                # Caso a data esteja como string, tente convertê-la diretamente
+                try:
+                    data_formatada = datetime.strptime(data, "%d/%m/%Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    exibir_log(f"Data em formato incorreto para matrícula {matricula}. Ignorando a linha.")
+                    continue
+            
+            # Obter o ID do funcionário pela matrícula
+            id_funcionario = None
+            url = "https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople"
+            headers = {
+                'identifier': dados_selecionados["CNPJ"],
+                'key': dados_selecionados["Chave API"],
+                'User-Agent': 'PostmanRuntime/7.30.0'
+            }
+            payload = {"Matricula": matricula}
+            
+            # Realizar a requisição para buscar o ID do funcionário
+            response = requests.post(url, json=payload, headers=headers)
+            
+            # Verificar se a requisição foi bem-sucedida
+            if response.status_code == 200:
+                data_response = response.json()
+                
+                # Verificar se o funcionário foi encontrado
+                if 'Obj' in data_response and data_response['Obj']:
+                    for funcionario in data_response['Obj']:
+                        if funcionario['Matricula'] == matricula:
+                            return funcionario['id']
+                            
+                id_funcionario = funcionario['Id']
+                
+                if descricao_justificativa == "Folga":
+                    
+                # Escrever a linha no arquivo de folgas com Matricula, PIS e Data
+                    linha_folga = (
+                        f"{str(matricula).ljust(16)}"
+                        f"{str(pis).ljust(23)}"
+                        f"{str(data).ljust(10)}\n"
+                    )
+                    arquivo_folgas.write(linha_folga)
+                    exibir_log(f"Folga registrada para matrícula {matricula} no dia {data}.")
+                    continue
+                
+                if not id_funcionario:
+                    exibir_log(f"Nenhum colaborador encontrado com a matrícula {matricula}")
+                    continue
+                else:
+                    print(f"ID do funcionário {matricula}: {id_funcionario}")
+            else:
+                print(f"Erro ao buscar ID para matrícula {matricula}: {response.status_code}")
+                continue
+            
+            # Buscar o ID da justificativa
+            id_justificativa = ids_justificativas.get(descricao_justificativa)
+            if id_justificativa is None:
+                print(f"Justificativa '{descricao_justificativa}' não encontrada nos registros.")
+                continue
+            else:
+                print(f"ID da justificativa '{descricao_justificativa}': {id_justificativa}")
+            
+            # Enviar justificativa
+            enviar_justificativa(id_funcionario, id_justificativa, descricao_justificativa, data_formatada)
+    
+    messagebox.showinfo("Sucesso", "Processamento do arquivo concluído.")
+
+root = ttk.Window(themename="darkly")
 root.title("Seleção de Empresa e Envio de Marcações")
 root.iconbitmap("M-Comune.ico")
 
@@ -1442,7 +1784,8 @@ for i in range(4):
 ttk.Button(botao_frame, text="Enviar Marcação", command=enviar_marcacoes, width=botao_width, bootstyle="info").grid(row=0, column=0, padx=10)
 ttk.Button(botao_frame, text="Envio", command=abrir_popup_selecao_pessoas, width=botao_width, bootstyle="info").grid(row=0, column=1, padx=10)
 ttk.Button(botao_frame, text="Coleta", command=abrir_popup_selecao_coleta, width=botao_width, bootstyle="info").grid(row=0, column=2, padx=10)
-ttk.Button(botao_frame, text=" Sel. Justificativa", command=abrir_popup_futuro, width=botao_width, bootstyle="info").grid(row=0, column=3, padx=10)
+ttk.Button(botao_frame, text=" Sel. Justificativa", command=funcao_justificativa_get, width=botao_width, bootstyle="info").grid(row=0, column=3, padx=10)
+ttk.Button(botao_frame, text=" Envio Just", command=processar_arquivo_excel, width=botao_width, bootstyle="info").grid(row=0, column=4, padx=10)
 
 # Ajustes para centralização geral do frame
 frame_selecao.grid_columnconfigure(0, weight=1)
