@@ -760,7 +760,6 @@ def coleta_planilha_marcacoes():
                         'Matricula': item['InfoFuncionario']['Matricula'],
                         'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
-
                     # Cria um dicionário para armazenar as marcações por data
                     entradas_por_data = {}
                     for entrada in item['Entradas']:

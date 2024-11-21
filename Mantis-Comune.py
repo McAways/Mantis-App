@@ -90,8 +90,7 @@ def abrir_popup_selecao_coleta():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup),bootstyle="info"
-    ).grid(row=len(selecoes), column=0, pady=10)
+        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info").grid(row=len(selecoes), column=0, pady=10)
     
     popup.protocol("WM_DELETE_WINDOW", popup.destroy)
     
@@ -181,8 +180,7 @@ def abrir_popup_selecao_pessoas():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info"
-    ).grid(row=len(selecoes), column=0, pady=10)
+        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info").grid(row=len(selecoes), column=0, pady=10)
     
     frame_popup.grid_rowconfigure(len(selecoes), weight=1)
     frame_popup.grid_columnconfigure(0, weight=1)
@@ -762,7 +760,6 @@ def coleta_planilha_marcacoes():
                         'Matricula': item['InfoFuncionario']['Matricula'],
                         'Estrutura': item['InfoFuncionario']['Estrutura']
                     }
-
                     # Cria um dicionário para armazenar as marcações por data
                     entradas_por_data = {}
                     for entrada in item['Entradas']:
