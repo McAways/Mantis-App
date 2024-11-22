@@ -709,17 +709,14 @@ def coleta_planilha_marcacoes_incomum():
     # Remove o log de salvamento se não houver dados válidos
     if response.status_code == 200 and ('Obj' not in data or not data['Obj']):
         exibir_log("Não há dados válidos para salvar a planilha.")
-    
+
 def coleta_planilha_marcacoes():
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
         title="Salvar arquivo como"
     )
-    
-    url1 = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson'
-    
-    
+
     # URL do endpoint e payload
     url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'  # Modifique para o endpoint correto
     
@@ -801,6 +798,7 @@ def coleta_planilha_marcacoes():
 
                 # Adiciona a nova coluna "Justificativa" com valores em branco inicialmente
                 final_df['Justificativa'] = ''
+                final_df['Qtd Horas'] = ''
                 final_df['Entrada'] = ''
                 final_df['Almoço Ida'] = ''
                 final_df['Almoço Volta'] = ''
@@ -1376,6 +1374,7 @@ def alteracao_pessoas_envio():
                     "TipoSalario": {"Id": 101},
                     "Sexo": Sexo,
                     "FlagGerarNumeroPISAutomatico": True,  # Gera automaticamente o PIS
+                    "CpfResponsavel": dados_selecionados["CPF Responsável"]
                 }
             else:
                 # Caso PIS esteja preenchido, envia normalmente
@@ -1394,6 +1393,7 @@ def alteracao_pessoas_envio():
                     "Sexo": Sexo,
                     "FlagGerarNumeroPISAutomatico": False,  # Não gera o PIS automático
                     "Pis": Pis,  # Envia o PIS preenchido
+                    "CpfResponsavel": dados_selecionados["CPF Responsável"]
                 }
 
             # Exclui o Email do payload se for None
@@ -1585,7 +1585,7 @@ def carregar_ids_justificativas():
             ids_justificativas[descricao] = int(id_just)
     return ids_justificativas
 
-def enviar_justificativa(id_funcionario, id_justificativa, descricao, data):
+def enviar_justificativa(id_funcionario, id_justificativa, descricao, data, qtd_horas):
     url = "https://www.dimepkairos.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
 
     headers = {
@@ -1597,7 +1597,7 @@ def enviar_justificativa(id_funcionario, id_justificativa, descricao, data):
         "IdJustification": id_justificativa,
         "IdUser": '1',
         "IdEmployee": id_funcionario,
-        "QtdHours": "09:00",
+        "QtdHours": qtd_horas,
         "Date": data,
         "Notes" : "Enviado via API",
         "RequestType":"1",
@@ -1642,10 +1642,11 @@ def processar_arquivo_excel():
     with open(caminho_folgas, "w") as arquivo_folgas:
         # Processar cada linha da planilha
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            matricula = row[2]
-            descricao_justificativa = row[10]
-            data = row[4]
-            pis = row[1]
+            matricula = row[2] if len(row) > 2 else None
+            descricao_justificativa = row[10] if len(row) > 10 else None
+            data = row[4] if len(row) > 4 else None
+            pis = row[1] if len(row) > 1 else None
+            qtd_horas = row[11] if len(row) > 11 else None
 
             if not descricao_justificativa:
                 continue
@@ -1659,7 +1660,25 @@ def processar_arquivo_excel():
                 except ValueError:
                     exibir_log(f"Data em formato incorreto para matrícula {matricula}. Ignorando a linha.")
                     continue
-
+            
+            # Validar ou ajustar qtd_horas
+            if not qtd_horas or str(qtd_horas).strip() == "":
+                qtd_horas = "12:00"
+            else:
+                if isinstance(qtd_horas, time):  # Verifica se é do tipo time
+                    # Converter objeto time para string no formato HH:mm
+                    qtd_horas = qtd_horas.strftime("%H:%M")
+                elif isinstance(qtd_horas, str):  # Verifica se é string
+                    try:
+                        # Validar formato HH:mm
+                        datetime.strptime(qtd_horas, "%H:%M")
+                    except ValueError:
+                        exibir_log(f"Formato inválido para qtd_horas na matrícula {matricula}: '{qtd_horas}'. Usando padrão '12:00'.")
+                        qtd_horas = "12:00"
+                else:
+                    exibir_log(f"Formato desconhecido para qtd_horas na matrícula {matricula}. Usando padrão '12:00'.")
+                    qtd_horas = "12:00"
+            
             # Obter o CPF pela matrícula
             url = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson"
             headers = {
@@ -1675,7 +1694,6 @@ def processar_arquivo_excel():
                 data_response = response.json()
                 if 'Obj' in data_response and data_response['Obj']:
                     try:
-                        # Garantir que 'Obj' seja interpretado como uma lista de dicionários
                         funcionarios = json.loads(data_response['Obj']) if isinstance(data_response['Obj'], str) else data_response['Obj']
                         funcionario = funcionarios[0]  # Pega o primeiro resultado
                         cpf = funcionario.get('Cpf', None)
@@ -1717,7 +1735,7 @@ def processar_arquivo_excel():
                 exibir_log(f"Nenhum colaborador encontrado com a matrícula {matricula}")
                 continue
 
-            enviar_justificativa(id_funcionario, id_justificativa, descricao_justificativa, data_formatada)
+            enviar_justificativa(id_funcionario, id_justificativa, descricao_justificativa, data_formatada, qtd_horas)
 
     messagebox.showinfo("Sucesso", "Processamento do arquivo concluído.")
 
