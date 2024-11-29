@@ -81,7 +81,8 @@ def abrir_popup_selecao_coleta():
         "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes],
         "Planilha de Inconsistência": [tk.BooleanVar(), coleta_planilha_marcacoes_inconsistencia],
         "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum],
-        "Planilha de Horas Faltas": [tk.BooleanVar(), coleta_planilha_marcacoes_faltantes]
+        "Planilha de Horas Faltas": [tk.BooleanVar(), coleta_planilha_marcacoes_faltantes],
+        "Planilha de Ferias": [tk.BooleanVar(), coleta_planilha_ferias]
     }
 
     for i, (nome, (var, _)) in enumerate(selecoes.items()):
@@ -170,7 +171,8 @@ def abrir_popup_selecao_pessoas():
     # Variáveis para armazenar as seleções
     selecoes = {
         "Cadastrar Pessoas": [tk.BooleanVar(), cadastrar_pessoas],
-        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio]
+        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio],
+        "Envio de Ferias": [tk.BooleanVar(), envio_planilha_ferias]
     }
 
     # Criação dinâmica dos Checkbuttons
@@ -989,7 +991,6 @@ def combinar_data_hora(data_completa, hora, tipo_marcacao=""):
     return None
 
 def processar_marcacoes(df):
-    """Processa o envio de marcações a partir do DataFrame."""
     if df.empty:
         exibir_log("Arquivo sem dados de marcações. Ignorando operação.")
         return
@@ -1247,6 +1248,118 @@ def coleta_empresa():
     
     exibir_log(f'Planilha de Cadastro salva em {output_path}')
 
+def coleta_planilha_ferias():
+    
+    output_path = filedialog.asksaveasfilename(
+                    defaultextension=".xlsx",
+                    filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                    title="Salvar planilha de inconsistências"
+                    )
+    
+    url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
+    payload = {
+        "Matricula": 0 
+    }
+    headers = {
+        "identifier": dados_selecionados['CNPJ'],
+        "key": dados_selecionados['Chave API'],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+    
+    df = get_data_from_api(url, payload, headers)
+    df = df.add_prefix('Colaborador_')
+    
+    selected_colomns =[ 'Colaborador_Matricula','Colaborador_Nome']
+    
+    
+    df_filtrado = df[selected_colomns]
+    final_df = pd.DataFrame(df_filtrado)
+    final_df['Data Inicio'] = ''
+    final_df['Data Fim'] = ''
+    
+    ferias_df = final_df
+    
+    ferias_df.to_excel(output_path, index=False)
+    aplicar_estilo(output_path)
+    
+    exibir_log(f'Planilha de feriass salva em {output_path}')
+
+#Em breve
+def envio_planilha_ferias():
+    caminho_arquivo = filedialog.askopenfilename(
+        title="Selecione o arquivo de cadastro de pessoas",
+        filetypes=[("Arquivo Excel", "*.xlsx *.xls")]
+    )
+    if not caminho_arquivo:
+        return
+    
+    try:
+        df = pd.read_excel(caminho_arquivo)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao ler o arquivo: {e}")
+        return
+    
+    
+    resultados = []
+    df = df.fillna('')  # Preenche NaNs com string vazia
+    url = 'https://www.dimepkairos.com.br/RestServiceApi/Holiday/MarkHoliday'
+    headers = {
+        'identifier': dados_selecionados['CNPJ'],
+        'key': dados_selecionados['Chave API'],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+    
+    for index, row in df.iterrows():
+        try:
+            Matricula = row['Colaborador_Matricula']
+            Data_inicio = row['Data Inicio']
+            Data_fim = row['Data Fim']
+            
+            
+            try:
+                if isinstance(Data_inicio, datetime):
+                    data_formatada_inicio = Data_inicio.strftime("%Y-%m-%d")
+                else:
+                    data_formatada_inicio = datetime.strptime(str(Data_inicio), "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                exibir_log(f"Data Inicio invalida para matrícula {Matricula}. Ignorando.")
+                continue
+
+            try:
+                if isinstance(Data_inicio, datetime):
+                    data_formatada_fim = Data_fim.strftime("%Y-%m-%d")
+                else:
+                    data_formatada_fim = datetime.strptime(str(Data_fim), "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                exibir_log(f"Data Final invalida para matrícula {Matricula}. Ignorando.")
+                continue
+            
+            payload = {
+                "MATRICULA": Matricula,
+                "DATAINICIO": data_formatada_inicio,
+                "DATAFIM": data_formatada_fim,
+                "ConfirmacaoFeriasPrimeiroPeriodoAquisitivo": 'true',
+            }
+            
+            response = requests.post(url, json=payload, headers=headers)
+            response_json = response.json()
+
+            # Verificar sucesso ou falha
+            if response_json.get("Sucesso"):
+                status = "Sucesso"
+                mensagem = response_json.get("Mensagem", "")
+                exibir_log(f'Ferias enviadas com SUCESSO para a {Matricula}')
+            else:
+                status = "Falha"
+                mensagem = response_json.get("Mensagem", "Erro desconhecido")
+
+        except Exception as e:
+            status = "Erro"
+            mensagem = str(e)
+            
+            # Armazenar o resultado
+        resultados.append([Matricula, status, mensagem])
+
 def alteracao_pessoas():
     url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
     payload = {
@@ -1274,6 +1387,7 @@ def alteracao_pessoas():
     
     
     df_filtrado = df[selected_colomns]
+    df_filtrado = aplicar_estilo()
     
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
