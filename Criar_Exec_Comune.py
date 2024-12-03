@@ -9,7 +9,7 @@ def criar_executavel(script_path):
         'PyInstaller',
         '--onefile',
         '--noconsole',
-        '--icon=M-Comune.ico',
+        '--icon=Mantis-Comune.ico',
         script_path
     ]
     

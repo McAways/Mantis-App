@@ -1,1 +1,1 @@
-13,Horas Faltas Justificadas
+10,Atestado Médico

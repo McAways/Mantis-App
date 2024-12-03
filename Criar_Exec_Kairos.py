@@ -9,7 +9,7 @@ def criar_executavel(script_path):
         'PyInstaller',
         '--onefile',
         '--noconsole',
-        '--icon=M-Kairos.ico',
+        '--icon=Mantis-Kairos.ico',
         script_path
     ]
     

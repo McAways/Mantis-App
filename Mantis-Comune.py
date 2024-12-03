@@ -16,6 +16,10 @@ from openpyxl.styles import Font, Color, Alignment, PatternFill, Border, Side
 from PIL import Image, ImageTk
 import math
 import re
+from tqdm import tqdm
+import threading
+from threading import Thread
+import time
 
 dados_selecionados = {}
 
@@ -68,8 +72,9 @@ def aplicar_estilo(output_path):
 
 def abrir_popup_selecao_coleta():
     popup = ttk.Toplevel(root)
-    popup.title("Selecione as funções para coletar")
+    popup.title("Selecione a planilha a coletar")
     popup.geometry("400x300")
+    popup.iconbitmap("Mantis-Comune.ico")
     
     frame_popup = ttk.Frame(popup)
     frame_popup.pack(expand=True)
@@ -81,7 +86,8 @@ def abrir_popup_selecao_coleta():
         "Planilha de Marcação": [tk.BooleanVar(), coleta_planilha_marcacoes],
         "Planilha de Inconsistência": [tk.BooleanVar(), coleta_planilha_marcacoes_inconsistencia],
         "Planilha de Incomum": [tk.BooleanVar(), coleta_planilha_marcacoes_incomum],
-        "Planilha de Horas Faltas": [tk.BooleanVar(), coleta_planilha_marcacoes_faltantes]
+        "Planilha de Horas Faltas": [tk.BooleanVar(), coleta_planilha_marcacoes_faltantes],
+        "Planilha de Ferias": [tk.BooleanVar(), coleta_planilha_ferias]
     }
 
     for i, (nome, (var, _)) in enumerate(selecoes.items()):
@@ -90,12 +96,82 @@ def abrir_popup_selecao_coleta():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="Info").grid(row=len(selecoes), column=0, pady=10)
+        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info").grid(row=len(selecoes), column=0, pady=10)
     
     popup.protocol("WM_DELETE_WINDOW", popup.destroy)
     
     frame_popup.grid_rowconfigure(len(selecoes), weight=1)
     frame_popup.grid_columnconfigure(0, weight=1)
+
+def mostrar_duas_barras_progresso_paralelo(funcao1, funcao2, df, titulo="Processando"):
+    janela = tk.Toplevel()
+    janela.title(titulo)
+    janela.geometry("400x250")
+    janela.resizable(False, False)
+    janela.iconbitmap("Mantis-Comune.ico")
+
+    # Variável para controle de cancelamento
+    cancelar = threading.Event()
+
+    # Filtra apenas as linhas válidas para cada processo
+    df_marcacoes_validas = df[df[['Entrada', 'Almoço Ida', 'Almoço Volta', 'Saida']].notna().any(axis=1)]
+    df_justificativas_validas = df[df['Justificativa'].notna()]
+
+    # Barra e status para a primeira função (Marcações)
+    label_status1 = tk.Label(janela, text="Iniciando envio de marcações...", font=("Arial", 12))
+    label_status1.pack(pady=5)
+
+    barra1 = ttk.Progressbar(janela, orient="horizontal", mode="determinate", length=300)
+    barra1.pack(pady=5)
+
+    # Barra e status para a segunda função (Justificativas)
+    label_status2 = tk.Label(janela, text="Iniciando envio de justificativas...", font=("Arial", 12))
+    label_status2.pack(pady=5)
+
+    barra2 = ttk.Progressbar(janela, orient="horizontal", mode="determinate", length=300)
+    barra2.pack(pady=5)
+
+    # Botão de Cancelar
+    botao_cancelar = ttk.Button(janela, text="Cancelar", bootstyle='danger',command=cancelar.set)
+    botao_cancelar.pack(pady=10)
+
+    def executar_tarefa(funcao, barra, label_status, nome_tarefa, df_valido):
+        """
+        Executa uma função enquanto atualiza a barra e o rótulo correspondentes.
+        Respeita o sinalizador de cancelamento.
+        """
+        try:
+            barra["maximum"] = len(df_valido)  # Define o máximo com base nas linhas válidas
+            funcao(df_valido, barra, label_status, cancelar)  # Processa as linhas válidas
+        except Exception as e:
+            exibir_log(f"Erro durante {nome_tarefa}: {e}")
+            label_status.config(text=f"Erro: {e}")
+        finally:
+            if not cancelar.is_set():
+                label_status.config(text=f"{nome_tarefa} concluído!")
+
+    # Criação de threads para execução paralela
+    thread1 = threading.Thread(target=executar_tarefa, args=(processar_marcacoes, barra1, label_status1, "Envio de Marcações", df_marcacoes_validas))
+    thread2 = threading.Thread(target=executar_tarefa, args=(processar_arquivo_excel, barra2, label_status2, "Envio de Justificativas", df_justificativas_validas))
+
+    # Iniciar as threads
+    thread1.start()
+    thread2.start()
+
+    # Fechar a janela automaticamente quando ambas as threads terminarem ou ao cancelar
+    def verificar_threads():
+        if not thread1.is_alive() and not thread2.is_alive():
+            janela.destroy()
+        elif cancelar.is_set():
+            janela.destroy()
+        else:
+            janela.after(100, verificar_threads)
+
+    verificar_threads()
+
+    janela.transient()
+    janela.grab_set()
+    janela.mainloop()
 
 def envio_justificativa():
     """Função para enviar marcações para a API usando o Excel selecionado."""
@@ -161,8 +237,9 @@ def envio_justificativa():
 
 def abrir_popup_selecao_pessoas():
     popup = ttk.Toplevel(root)
-    popup.title("Selecione as funções para coletar")
+    popup.title("Selecione a função de envio")
     popup.geometry("300x200")
+    popup.iconbitmap("Mantis-Comune.ico")
     
     frame_popup = ttk.Frame(popup)
     frame_popup.pack(expand=True)
@@ -170,7 +247,8 @@ def abrir_popup_selecao_pessoas():
     # Variáveis para armazenar as seleções
     selecoes = {
         "Cadastrar Pessoas": [tk.BooleanVar(), cadastrar_pessoas],
-        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio]
+        "Alteração de Pessoas": [tk.BooleanVar(), alteracao_pessoas_envio],
+        "Envio de Ferias": [tk.BooleanVar(), envio_planilha_ferias]
     }
 
     # Criação dinâmica dos Checkbuttons
@@ -180,7 +258,7 @@ def abrir_popup_selecao_pessoas():
     # Centraliza o botão abaixo dos Checkbuttons
     ttk.Button(
         frame_popup, text="Iniciar Coleta", 
-        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="Info").grid(row=len(selecoes), column=0, pady=10)
+        command=lambda: iniciar_coleta(selecoes, popup), bootstyle="info").grid(row=len(selecoes), column=0, pady=10)
     
     frame_popup.grid_rowconfigure(len(selecoes), weight=1)
     frame_popup.grid_columnconfigure(0, weight=1)
@@ -244,7 +322,7 @@ def coleta_planilha_marcacoes_faltantes():
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo como"
+        title="Salvar planilha de faltas e atrasos em:"
     )
     
     # URL do endpoint e payload
@@ -342,6 +420,7 @@ def coleta_planilha_marcacoes_faltantes():
 
                 # Adiciona a nova coluna "Justificativa" com valores em branco inicialmente
                 final_df['Justificativa'] = ''
+                final_df['Qtd Horas'] = ''
                 final_df['Entrada'] = ''
                 final_df['Almoço Ida'] = ''
                 final_df['Almoço Volta'] = ''
@@ -450,7 +529,7 @@ def coleta_planilha_marcacoes_inconsistencia():
     output_path = filedialog.asksaveasfilename(
                     defaultextension=".xlsx",
                     filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-                    title="Salvar planilha de inconsistências"
+                    title="Salvar planilha de inconsistências em:"
                     )
     
     url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
@@ -468,6 +547,7 @@ def coleta_planilha_marcacoes_inconsistencia():
             "ResponseType": "AS400V1"
     }
     
+    
     response = requests.post(url, json=payload, headers=headers)
 
     if response.status_code == 200:
@@ -475,6 +555,8 @@ def coleta_planilha_marcacoes_inconsistencia():
             data = response.json()
             if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
+                
+                justificativas = carregar_justificativas()
                 
                 for item in data['Obj']:
                     fixed_data = {
@@ -507,6 +589,8 @@ def coleta_planilha_marcacoes_inconsistencia():
                 if all_entries:
                     final_df = pd.DataFrame(all_entries)
 
+                    final_df['Justificativa'] = ''
+                    final_df['Qtd Horas'] = ''
                     final_df['Entrada'] = ''
                     final_df['Almoço Ida'] = ''
                     final_df['Almoço Volta'] = ''
@@ -518,26 +602,74 @@ def coleta_planilha_marcacoes_inconsistencia():
                     # Salvar o DataFrame com as marcações inconsistentes em Excel
                     inconsistencia_df.to_excel(output_path, index=False)
 
-                    # Aplicar o estilo no arquivo salvo
-                    aplicar_estilo(output_path)
-                    
-                    exibir_log(f'Planilha de Inconsistência da empresa {dados_selecionados["Razão Social"]} em {output_path}')
-                    
-                else:
-                    exibir_log("Nenhuma marcação válida encontrada para o período especificado.")
-            else:
-                exibir_log("Nenhum dado disponível no campo 'Obj'.")
-        except ValueError as e:
-            exibir_log(f"Erro ao decodificar JSON: {e}")
-            exibir_log("Conteúdo da resposta:")
-            exibir_log(response.text)
-    else:
-        exibir_log(f"Falha: {response.status_code}")
-        exibir_log(response.text)
+                    # Cria um Workbook do openpyxl
+                wb = openpyxl.load_workbook(output_path)
+                ws = wb.active
 
-    # Caso não haja dados válidos, exibe mensagem sem tentar salvar
-    if response.status_code == 200 and ('Obj' not in data or not data['Obj']):
-        exibir_log("Não há dados válidos para salvar a planilha.")
+                # Criar a validação de dados para a lista de justificativas selecionadas
+                if justificativas:
+                    justificativa_str = 'Folga,' + ','.join(justificativas)  # A lista de justificativas selecionadas
+                    # Criar a validação de dados para a lista suspensa
+                    justificativa_validation = DataValidation(
+                        type='list', 
+                        formula1=f'"{justificativa_str}"', 
+                        allow_blank=True
+                    )
+                    justificativa_validation.error = 'Escolher valores da lista'
+                    justificativa_validation.errorTitle = 'Entrada Invalida'
+                    justificativa_validation.prompt = 'Selecione uma justificativa'
+                    justificativa_validation.promptTitle = 'Justificativas'
+                    
+                    # Adiciona a validação de dados na coluna "Justificativa"
+                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                    justificativa_col_letter = get_column_letter(justificativa_col_index)
+                    ws.add_data_validation(justificativa_validation)
+                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+
+                    # Ajusta a largura das colunas automaticamente
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(cell.value)
+                            except:
+                                pass
+                        adjusted_width = (max_length + 2)
+                        ws.column_dimensions[column].width = adjusted_width
+
+                    # Formatação de cor alternada nas linhas
+                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                    
+                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                        for cell in row:
+                            if cell.row % 2 == 0:
+                                cell.fill = fill_grey
+                            else:
+                                cell.fill = fill_white
+                            cell.alignment = Alignment(horizontal="left", vertical="center")
+                        
+                    apply_borders(ws)
+
+                    # Salva o arquivo Excel com formatação
+                    wb.save(output_path)
+                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
+                else:
+                    print("Nenhuma justificativa selecionada.")
+            else:
+                print("Nenhum dado no campo 'Obj'.")
+        except ValueError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+            print("Conteúdo da resposta:")
+            print(response.text)
+    else:
+        print(f"Falha: {response.status_code}")
+        print(response.text)
+    
+    exibir_log(f'Planilha de Inconsistencias salva em {output_path}')
+    print(payload)
 
 def process_incomum(df):
     incomuns = pd.DataFrame(columns=df.columns)
@@ -568,7 +700,7 @@ def coleta_planilha_marcacoes_incomum():
     output_path = filedialog.asksaveasfilename(
                     defaultextension=".xlsx",
                     filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-                    title="Salvar planilha de marcação incomum"
+                    title="Salvar planilha de marcação incomum em:"
                     )
     
     url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
@@ -625,6 +757,7 @@ def coleta_planilha_marcacoes_incomum():
                     final_df = pd.DataFrame(all_entries)
                     
                     final_df['Justificativa'] = ''
+                    final_df['Qtd Horas'] = ''
                     final_df['Entrada'] = ''
                     final_df['Almoço Ida'] = ''
                     final_df['Almoço Volta'] = ''
@@ -714,7 +847,7 @@ def coleta_planilha_marcacoes():
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo como"
+        title="Salvar planilha de marcação em:"
     )
 
     # URL do endpoint e payload
@@ -988,8 +1121,10 @@ def combinar_data_hora(data_completa, hora, tipo_marcacao=""):
                 return None
     return None
 
-def processar_marcacoes(df):
-    """Processa o envio de marcações a partir do DataFrame."""
+def processar_marcacoes(df, barra, label_status, cancelar):
+    """
+    Processa as marcações e as envia para a API, com suporte a cancelamento.
+    """
     if df.empty:
         exibir_log("Arquivo sem dados de marcações. Ignorando operação.")
         return
@@ -1003,6 +1138,10 @@ def processar_marcacoes(df):
     }
 
     for index, row in df.iterrows():
+        if cancelar.is_set():
+            exibir_log("Envio de marcações cancelado pelo usuário.")
+            return
+
         matricula = row.get('Matricula')
         data_completa = row.get('Data')
 
@@ -1014,6 +1153,10 @@ def processar_marcacoes(df):
         }
 
         for tipo, hora in marcacoes.items():
+            if cancelar.is_set():
+                exibir_log("Envio de marcações cancelado pelo usuário.")
+                return
+
             if pd.notna(hora):
                 data_hora_marcacao = combinar_data_hora(data_completa, hora, tipo)
                 if data_hora_marcacao:
@@ -1026,8 +1169,20 @@ def processar_marcacoes(df):
                     response = requests.post(url, json=payload, headers=headers)
                     status = "Sucesso" if response.status_code == 200 else "Falha"
                     mensagem = response.json().get("Mensagem", "Erro desconhecido") if response.ok else response.text
-                    exibir_log(f"{tipo} enviada para {matricula}: {status} - {mensagem}")
+                    exibir_log(f"Marcação de {tipo} enviada para matrícula {matricula}: {status} - {mensagem}")
 
+        if barra and not cancelar.is_set():
+            barra.step(1)
+            barra.update_idletasks()
+        if label_status and not cancelar.is_set():
+            label_status.config(text=f"Marcação enviada para Matricula: {matricula}")
+
+    if not cancelar.is_set():
+        exibir_log("Processamento de marcações concluído.")
+        messagebox.showinfo("Sucesso", "Envio de marcações concluído.")
+    else:
+        exibir_log("Envio de marcações interrompido.")
+                
 def cadastrar_pessoas():
     """Cadastra pessoas na API utilizando dados do Excel."""
     caminho_arquivo = filedialog.askopenfilename(
@@ -1247,6 +1402,117 @@ def coleta_empresa():
     
     exibir_log(f'Planilha de Cadastro salva em {output_path}')
 
+def coleta_planilha_ferias():
+    
+    output_path = filedialog.asksaveasfilename(
+                    defaultextension=".xlsx",
+                    filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                    title="Salvar planilha de ferias em:"
+                    )
+    
+    url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
+    payload = {
+        "Matricula": 0 
+    }
+    headers = {
+        "identifier": dados_selecionados['CNPJ'],
+        "key": dados_selecionados['Chave API'],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+    
+    df = get_data_from_api(url, payload, headers)
+    df = df.add_prefix('Colaborador_')
+    
+    selected_colomns =[ 'Colaborador_Matricula','Colaborador_Nome']
+    
+    
+    df_filtrado = df[selected_colomns]
+    final_df = pd.DataFrame(df_filtrado)
+    final_df['Data Inicio'] = ''
+    final_df['Data Fim'] = ''
+    
+    ferias_df = final_df
+    
+    ferias_df.to_excel(output_path, index=False)
+    aplicar_estilo(output_path)
+    
+    exibir_log(f'Planilha de feriass salva em {output_path}')
+
+def envio_planilha_ferias():
+    caminho_arquivo = filedialog.askopenfilename(
+        title="Selecione o arquivo de cadastro de pessoas",
+        filetypes=[("Arquivo Excel", "*.xlsx *.xls")]
+    )
+    if not caminho_arquivo:
+        return
+    
+    try:
+        df = pd.read_excel(caminho_arquivo)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao ler o arquivo: {e}")
+        return
+    
+    
+    resultados = []
+    df = df.fillna('')  # Preenche NaNs com string vazia
+    url = 'https://www.mdcomune.com.br/RestServiceApi/Holiday/MarkHoliday'
+    headers = {
+        'identifier': dados_selecionados['CNPJ'],
+        'key': dados_selecionados['Chave API'],
+        'User-Agent': 'PostmanRuntime/7.30.0'
+    }
+    
+    for index, row in df.iterrows():
+        try:
+            Matricula = row['Colaborador_Matricula']
+            Data_inicio = row['Data Inicio']
+            Data_fim = row['Data Fim']
+            
+            
+            try:
+                if isinstance(Data_inicio, datetime):
+                    data_formatada_inicio = Data_inicio.strftime("%Y-%m-%d")
+                else:
+                    data_formatada_inicio = datetime.strptime(str(Data_inicio), "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                exibir_log(f"Data Inicio invalida para matrícula {Matricula}. Ignorando.")
+                continue
+
+            try:
+                if isinstance(Data_inicio, datetime):
+                    data_formatada_fim = Data_fim.strftime("%Y-%m-%d")
+                else:
+                    data_formatada_fim = datetime.strptime(str(Data_fim), "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                exibir_log(f"Data Final invalida para matrícula {Matricula}. Ignorando.")
+                continue
+            
+            payload = {
+                "MATRICULA": Matricula,
+                "DATAINICIO": data_formatada_inicio,
+                "DATAFIM": data_formatada_fim,
+                "ConfirmacaoFeriasPrimeiroPeriodoAquisitivo": 'true',
+            }
+            
+            response = requests.post(url, json=payload, headers=headers)
+            response_json = response.json()
+
+            # Verificar sucesso ou falha
+            if response_json.get("Sucesso"):
+                status = "Sucesso"
+                mensagem = response_json.get("Mensagem", "")
+                exibir_log(f'Ferias enviadas com SUCESSO para a {Matricula}')
+            else:
+                status = "Falha"
+                mensagem = response_json.get("Mensagem", "Erro desconhecido")
+
+        except Exception as e:
+            status = "Erro"
+            mensagem = str(e)
+            
+            # Armazenar o resultado
+        resultados.append([Matricula, status, mensagem])
+
 def alteracao_pessoas():
     url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
     payload = {
@@ -1274,11 +1540,12 @@ def alteracao_pessoas():
     
     
     df_filtrado = df[selected_colomns]
+    df_filtrado = aplicar_estilo()
     
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",  # extensão padrão
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],  # tipos de arquivo
-        title="Salvar arquivo como"
+        title="Salvar Pessoas para alteração em:"
     )
     
     df_filtrado.to_excel(output_path, index=False)
@@ -1520,14 +1787,20 @@ def funcao_justificativa_get():
     popup_futuro = tk.Toplevel(root)
     popup_futuro.title("Seleção de Justificativas")
     popup_futuro.geometry("400x380")
+    popup_futuro.iconbitmap("Mantis-Comune.ico")
 
     canvas = tk.Canvas(popup_futuro)
     scrollbar = ttk.Scrollbar(popup_futuro, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=scrollbar.set)
 
     frame_checkboxes = ttk.Frame(canvas)
-
     canvas.create_window((0, 0), window=frame_checkboxes, anchor="nw")
+
+    # Vincular evento de rolagem do mouse ao Canvas
+    def on_mouse_wheel(event):
+        canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+    canvas.bind("<MouseWheel>", on_mouse_wheel)
 
     scrollbar.pack(side="right", fill="y")
     canvas.pack(fill="both", expand=True)
@@ -1540,7 +1813,7 @@ def funcao_justificativa_get():
     canvas.config(scrollregion=canvas.bbox("all"))
 
     ttk.Button(
-        popup_futuro, text="Gravar Seleção", command=gravar_justificativas, bootstyle="Info"
+        popup_futuro, text="Gravar Seleção", command=gravar_justificativas, bootstyle="info"
     ).pack(pady=10)
 
     ttk.Button(
@@ -1577,36 +1850,35 @@ def carregar_ids_justificativas():
             ids_justificativas[descricao] = int(id_just)
     return ids_justificativas
 
-def enviar_justificativa(id_funcionario, id_justificativa, descricao, data, qtd_horas):
-    url = "https://www.mdcomune.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
+def enviar_justificativa(matricula, id_funcionario, id_justificativa, descricao, data, qtd_horas):
+        url = "https://www.mdcomune.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
 
-    headers = {
-        'identifier': dados_selecionados["CNPJ"],
-        'key': dados_selecionados["Chave API"],
-        'User-Agent': 'PostmanRuntime/7.30.0'
-    }
-    payload = {
-        "IdJustification": id_justificativa,
-        "IdUser": '1',
-        "IdEmployee": id_funcionario,
-        "QtdHours": qtd_horas,
-        "Date": data,
-        "Notes" : "Enviado via API",
-        "RequestType":"1",
-        "ResponseType":"AS400V1"
-    }
-    print(f"Enviando justificativa com payload: {payload}")
-    
-    try:
-        data_formatada = datetime.strptime(data, "%Y-%m-%d").strftime("%d/%m/%Y")
-    except ValueError:
-        data_formatada = data  # Se a data não estiver no formato esperado, mantém o original
-    
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        exibir_log(f"Justificativa registrada para funcionário {id_funcionario} - Dia: {data_formatada} - Qtd. Horas {qtd_horas}")
-    else:
-        exibir_log(f"Erro ao enviar justificativa para ID {id_funcionario}: {response.status_code}")
+        headers = {
+            'identifier': dados_selecionados["CNPJ"],
+            'key': dados_selecionados["Chave API"],
+            'User-Agent': 'PostmanRuntime/7.30.0'
+        }
+        payload = {
+            "IdJustification": id_justificativa,
+            "IdUser": '1',
+            "IdEmployee": id_funcionario,
+            "QtdHours": qtd_horas,
+            "Date": data,
+            "Notes" : "Enviado via API",
+            "RequestType":"1",
+            "ResponseType":"AS400V1"
+        }
+        
+        try:
+            data_formatada = datetime.strptime(data, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            data_formatada = data  # Se a data não estiver no formato esperado, mantém o original
+        
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            exibir_log(f"Justificativa registrada para matricula {matricula} - Dia: {data_formatada} - Tipo: {descricao} - Qtd. Horas {qtd_horas}")
+        else:
+            exibir_log(f"Erro ao enviar justificativa para ID {matricula}: {response.status_code}")
 
 def buscar_dados_funcionario(matricula):
     """Busca CPF e ID do funcionário pela matrícula."""
@@ -1646,7 +1918,7 @@ def validar_horas(qtd_horas):
         except ValueError:
             return "12:00"
 
-def processar_arquivo_excel(df):
+def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
     """
     Processa o DataFrame para envio de justificativas e registros de folgas.
     """
@@ -1658,7 +1930,7 @@ def processar_arquivo_excel(df):
 
     tem_folga = any(row.get('Justificativa') == "Folga" for index, row in df.iterrows())
 
-    caminho_folgas = None  
+    caminho_folgas = None
 
     if tem_folga:
         caminho_folgas = filedialog.asksaveasfilename(
@@ -1675,6 +1947,10 @@ def processar_arquivo_excel(df):
     if tem_folga and caminho_folgas:
         with open(caminho_folgas, "w") as arquivo_folgas:
             for index, row in df.iterrows():
+                if cancelar and cancelar.is_set():
+                    exibir_log("Envio de justificativas cancelado pelo usuário.")
+                    return
+
                 matricula = row.get('Matricula')
                 descricao_justificativa = row.get('Justificativa')
                 data = row.get('Data')
@@ -1698,13 +1974,17 @@ def processar_arquivo_excel(df):
                     linha_folga = (
                         f"{str(matricula).ljust(16)}"
                         f"{str(pis).ljust(23)}"
-                        f"{str(data).ljust(12)}"
+                        f"{data_formatada.ljust(12)}"
                         f"{str(cpf).ljust(11)}\n"
                     )
                     arquivo_folgas.write(linha_folga)
-                    exibir_log(f"Folga registrada para matrícula {matricula} no dia {data}.")
+                    exibir_log(f"Folga registrada para matrícula {matricula} no dia {data_formatada}.")
 
     for index, row in df.iterrows():
+        if cancelar and cancelar.is_set():
+            exibir_log("Envio de justificativas cancelado pelo usuário.")
+            return
+
         matricula = row.get('Matricula')
         descricao_justificativa = row.get('Justificativa')
         data = row.get('Data')
@@ -1712,8 +1992,6 @@ def processar_arquivo_excel(df):
 
         if not descricao_justificativa or pd.isna(descricao_justificativa) or descricao_justificativa == "Folga":
             continue
-
-        exibir_log(f"QtdHoras original: {qtd_horas}")
 
         try:
             if isinstance(data, datetime):
@@ -1724,9 +2002,7 @@ def processar_arquivo_excel(df):
             exibir_log(f"Data inválida para matrícula {matricula}. Ignorando.")
             continue
 
-        # Validar e formatar QtdHoras
         qtd_horas = validar_horas(qtd_horas)
-        exibir_log(f"QtdHoras após validação: {qtd_horas}")
 
         _, id_funcionario = buscar_dados_funcionario(matricula)
         if not id_funcionario:
@@ -1738,15 +2014,22 @@ def processar_arquivo_excel(df):
             exibir_log(f"Justificativa '{descricao_justificativa}' não encontrada. Ignorando.")
             continue
 
-        enviar_justificativa(id_funcionario, id_justificativa, descricao_justificativa, data_formatada, qtd_horas)
+        enviar_justificativa(matricula, id_funcionario, id_justificativa, descricao_justificativa, data_formatada, qtd_horas)
 
+        if barra and not cancelar.is_set():
+            barra.step(1)
+            barra.update_idletasks()
+        if label_status and not cancelar.is_set():
+            label_status.config(text=f"Justificativa para Matricula: {matricula}")
 
-    exibir_log("Processamento de justificativas concluído.")
-    messagebox.showinfo("Sucesso", "Processamento do arquivo concluído.")
+    if not cancelar.is_set():
+        exibir_log("Processamento de justificativas concluído.")
+    else:
+        exibir_log("Envio de justificativas interrompido.")
 
 def enviar_dados_combinados():
     caminho_arquivo = filedialog.askopenfilename(
-        title="Selecione o arquivo de dados",
+        title="Selecione a planilha de tratamento",
         filetypes=[("Arquivo Excel", "*.xlsx *.xls")]
     )
     if not caminho_arquivo:
@@ -1759,23 +2042,15 @@ def enviar_dados_combinados():
         exibir_log(f"Erro ao carregar o arquivo: {e}")
         return
 
-    try:
-        exibir_log(f"Iniciando envio de marcações para {dados_selecionados['Razão Social']} ")
-        processar_marcacoes(df)
-    except Exception as e:
-        exibir_log(f"Erro ao enviar marcações: {e}")
+    # Mostrar uma única janela com duas barras de progresso
+    exibir_log(f"Iniciando o tratamento para {dados_selecionados['Razão Social']}")
+    mostrar_duas_barras_progresso_paralelo(processar_marcacoes, processar_arquivo_excel, df, titulo="Enviando Dados")
+    exibir_log(f"Tratamento da empresa {dados_selecionados['Razão Social']} concluído")
 
-    try:
-        exibir_log(f"Iniciando envio de justificativas para {dados_selecionados['Razão Social']}")
-        processar_arquivo_excel(df)
-    except Exception as e:
-        exibir_log(f"Erro ao processar justificativas: {e}")
-
-    exibir_log(f"Tratamento da empresa {dados_selecionados['Razão Social']} concluido")
 
 root = ttk.Window(themename="darkly")
 root.title("Mantis")
-root.iconbitmap("M-Comune.ico")
+root.iconbitmap("Mantis-Comune.ico")
 
 razao_social_var = tk.StringVar()
 cnpj_var = tk.StringVar()
@@ -1840,10 +2115,10 @@ for i in range(4):  # Ajustando peso para cada botão (número de colunas deve c
 # Ajustando largura dos botões
 botao_width = 25  # Aumente conforme necessário para acomodar os textos maiores
 
-ttk.Button(botao_frame, text="Tratamento", command=enviar_dados_combinados, width=botao_width, bootstyle="Info").grid(row=0, column=0, padx=10, pady=5)
-ttk.Button(botao_frame, text="Pessoas", command=abrir_popup_selecao_pessoas, width=botao_width, bootstyle="Info").grid(row=0, column=1, padx=10, pady=5)
-ttk.Button(botao_frame, text="Coleta de Planilhas", command=abrir_popup_selecao_coleta, width=botao_width, bootstyle="Info").grid(row=0, column=2, padx=10, pady=5)
-ttk.Button(botao_frame, text="Selecionar Justificativas", command=funcao_justificativa_get, width=botao_width, bootstyle="Info").grid(row=0, column=3, padx=10, pady=5)
+ttk.Button(botao_frame, text="Tratamento", command=enviar_dados_combinados, width=botao_width, bootstyle="info").grid(row=0, column=0, padx=10, pady=5)
+ttk.Button(botao_frame, text="Pessoas", command=abrir_popup_selecao_pessoas, width=botao_width, bootstyle="info").grid(row=0, column=1, padx=10, pady=5)
+ttk.Button(botao_frame, text="Coleta de Planilhas", command=abrir_popup_selecao_coleta, width=botao_width, bootstyle="info").grid(row=0, column=2, padx=10, pady=5)
+ttk.Button(botao_frame, text="Selecionar Justificativas", command=funcao_justificativa_get, width=botao_width, bootstyle="info").grid(row=0, column=3, padx=10, pady=5)
 
 # Log de mensagens com barra de rolagem
 frame_log = ttk.Frame(frame_selecao, padding=5)
