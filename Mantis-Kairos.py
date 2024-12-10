@@ -2113,11 +2113,11 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
                     linha_folga = (
                         f"{str(matricula).ljust(16)}"
                         f"{str(pis).ljust(23)}"
-                        f"{data_formatada.ljust(12)}"
+                        f"{data.ljust(12)}"
                         f"{str(cpf).ljust(11)}\n"
                     )
                     arquivo_folgas.write(linha_folga)
-                    exibir_log(f"Folga registrada para matrícula {matricula} no dia {data_formatada}.")
+                    exibir_log(f"Folga registrada para matrícula {matricula} no dia {data}.")
 
     for index, row in df.iterrows():
         if cancelar and cancelar.is_set():
