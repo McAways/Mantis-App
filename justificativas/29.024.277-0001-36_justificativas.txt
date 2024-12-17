@@ -1,0 +1,2 @@
+1|Atestado Médico
+2|Desativado

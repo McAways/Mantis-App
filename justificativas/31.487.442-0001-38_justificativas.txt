@@ -1,0 +1,3 @@
+9|Atestado Médico
+10|Saída Antecipada
+11|Saída a Serviço
