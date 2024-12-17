@@ -27,7 +27,10 @@ def coleta_planilha_marcacoes_faltantes():
         title="Salvar planilha de faltas e atrasos em:"
     )
 
-    url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'  # Modifique para o endpoint correto
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
     
     headers = {
         "identifier": dados_selecionados["CNPJ"],
@@ -191,7 +194,10 @@ def coleta_planilha_marcacoes_inconsistencia():
                     title="Salvar planilha de inconsistências em:"
                     )
     
-    url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
     
     headers = {
             "identifier": dados_selecionados["CNPJ"],
@@ -335,7 +341,10 @@ def coleta_planilha_marcacoes_incomum():
                     title="Salvar planilha de marcação incomum em:"
                     )
     
-    url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
     
     headers = {
             "identifier": dados_selecionados["CNPJ"],
@@ -478,9 +487,10 @@ def coleta_planilha_marcacoes():
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
         title="Salvar planilha de marcação em:"
     )
-
-    url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
-
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
     headers = {
         "identifier": dados_selecionados["CNPJ"],
         "key": dados_selecionados["Chave API"],
@@ -623,12 +633,19 @@ def coleta_planilha_marcacoes():
         exibir_log(f"Falha: {response.status_code} - {response.text}")
 
 def coleta_empresa():
-    url1= 'https://www.mdcomune.com.br/RestServiceApi/CalculationRules/GetCalculationRulesSummary' # Cálculo
-    url2= 'https://www.mdcomune.com.br/RestServiceApi/Schedules/GetSchedulesSummary' # Horário
-    url3= 'https://www.mdcomune.com.br/RestServiceApi/OrganizationalStructure/GetOrganizationalStructure' # Estrutura
-    url4= 'https://www.mdcomune.com.br/RestServiceApi/JobPosition/SearchJobPosition' # Cargo
-    url5= 'https://www.mdcomune.com.br/RestServiceApi/Company/GetCompany' # Empresa
-    
+    if api_var.get() == "Kairos":
+        url1= 'https://www.dimepkairos.com.br/RestServiceApi/CalculationRules/GetCalculationRulesSummary' # Cálculo
+        url2= 'https://www.dimepkairos.com.br/RestServiceApi/Schedules/GetSchedulesSummary' # Horário
+        url3= 'https://www.dimepkairos.com.br/RestServiceApi/OrganizationalStructure/GetOrganizationalStructure' # Estrutura
+        url4= 'https://www.dimepkairos.com.br/RestServiceApi/JobPosition/SearchJobPosition' # Cargo
+        url5= 'https://www.dimepkairos.com.br/RestServiceApi/Company/GetCompany' # Empresa
+    else:
+        url1= 'https://www.mdcomune.com.br/RestServiceApi/CalculationRules/GetCalculationRulesSummary' # Cálculo
+        url2= 'https://www.mdcomune.com.br/RestServiceApi/Schedules/GetSchedulesSummary' # Horário
+        url3= 'https://www.mdcomune.com.br/RestServiceApi/OrganizationalStructure/GetOrganizationalStructure' # Estrutura
+        url4= 'https://www.mdcomune.com.br/RestServiceApi/JobPosition/SearchJobPosition' # Cargo
+        url5= 'https://www.mdcomune.com.br/RestServiceApi/Company/GetCompany' # Empresa
+        
     payload1={}
     payload2 = {"ResponseType": "AS400V1"}
     
@@ -728,8 +745,11 @@ def coleta_planilha_desligamento():
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
         title="Salvar planilha de ferias em:"
     )
-    
-    url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
+        
     payload = {
         "Matricula": 0 
     }
@@ -774,7 +794,10 @@ def coleta_planilha_ferias():
         title="Salvar planilha de ferias em:"
     )
     
-    url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
     payload = {
         "Matricula": 0 
     }
@@ -823,8 +846,10 @@ def alteracao_pessoas():
     if not output_path:
         exibir_log("Nenhum local de salvamento foi selecionado.")
         return
-
-    url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople'
     payload = {"Matricula": 0}
     headers = {
         "identifier": dados_selecionados["CNPJ"],
@@ -875,8 +900,10 @@ def processar_marcacoes(df, barra, label_status, cancelar):
     if df.empty:
         exibir_log("Arquivo sem dados de marcações. Ignorando operação.")
         return
-
-    url = "https://www.mdcomune.com.br/RestServiceApi/Mark/SetMarks"
+    if api_var.get() == "Kairos":
+        url = "https://www.dimepkairos.com.br/RestServiceApi/Mark/SetMarks"
+    else:
+        url = "https://www.mdcomune.com.br/RestServiceApi/Mark/SetMarks"
     headers = {
         "identifier": dados_selecionados['CNPJ'],
         "key": dados_selecionados['Chave API'],
@@ -962,8 +989,10 @@ def coleta_cargos():
         if not output_path:
             exibir_log("Operação cancelada pelo usuário.")
             return
-        
-        url = 'https://www.mdcomune.com.br/RestServiceApi/JobPosition/SearchJobPosition'
+        if api_var.get() == "Kairos":
+            url = 'https://www.dimepkairos.com.br/RestServiceApi/JobPosition/SearchJobPosition'
+        else:
+            url = 'https://www.mdcomune.com.br/RestServiceApi/JobPosition/SearchJobPosition'
         payload = {}
         headers = {
             "identifier": dados_selecionados['CNPJ'],
@@ -1005,8 +1034,10 @@ def coleta_cargos():
 #Funções de Tratamento de ponto (Envio)
 
 def enviar_justificativa(matricula, id_funcionario, id_justificativa, descricao, data, qtd_horas):
-        url = "https://www.mdcomune.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
-
+        if api_var.get() == "Kairos":
+            url = "https://www.dimepkairos.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
+        else:
+            url = "https://www.mdcomune.com.br/RestServiceApi/PreJustificationRequest/PreJustificationRequest"
         headers = {
             'identifier': dados_selecionados["CNPJ"],
             'key': dados_selecionados["Chave API"],
@@ -1051,7 +1082,10 @@ def envio_planilha_desligamento():
     
     resultados = []
     df = df.fillna('')
-    url = 'https://www.mdcomune.com.br/RestServiceApi/Dismiss/MarkDismiss'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/Dismiss/MarkDismiss'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/Dismiss/MarkDismiss'
     headers = {
         'identifier': dados_selecionados['CNPJ'],
         'key': dados_selecionados['Chave API'],
@@ -1124,7 +1158,11 @@ def envio_planilha_ferias():
     
     resultados = []
     df = df.fillna('')
-    url = 'https://www.mdcomune.com.br/RestServiceApi/Holiday/MarkHoliday'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/Holiday/MarkHoliday'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/Holiday/MarkHoliday'
+        
     headers = {
         'identifier': dados_selecionados['CNPJ'],
         'key': dados_selecionados['Chave API'],
@@ -1204,7 +1242,11 @@ def cadastrar_pessoas():
         return
 
     resultados = []
-    url = "https://www.mdcomune.com.br/RestServiceApi/People/SavePerson"
+    if api_var.get() == "Kairos":
+        url = "https://www.dimepkairos.com.br/RestServiceApi/People/SavePerson"
+    else:
+        url = "https://www.mdcomune.com.br/RestServiceApi/People/SavePerson"
+         
     headers = {
         "identifier": dados_selecionados["CNPJ"],
         "key": dados_selecionados["Chave API"],
@@ -1328,7 +1370,10 @@ def alteracao_pessoas_envio():
 
     resultados = []
     df = df.fillna('')
-    url = 'https://www.mdcomune.com.br/RestServiceApi/People/ChangePerson'
+    if api_var.get() == "Kairos":
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/People/ChangePerson'
+    else:
+        url = 'https://www.mdcomune.com.br/RestServiceApi/People/ChangePerson'
     headers = {
         'identifier': dados_selecionados['CNPJ'],
         'key': dados_selecionados['Chave API'],
@@ -1456,7 +1501,10 @@ def cadastro_cargo():
 
     resultados = []
     df = df.fillna("")  # Substitui valores NaN por strings vazias
-    url = "https://www.mdcomune.com.br/RestServiceApi/JobPosition/SaveJobPosition"
+    if api_var.get() == "Kairos":
+        url = "https://www.dimepkairos.com.br/RestServiceApi/JobPosition/SaveJobPosition"
+    else:
+        url = "https://www.mdcomune.com.br/RestServiceApi/JobPosition/SaveJobPosition"
     headers = {
         "identifier": dados_selecionados["CNPJ"],
         "key": dados_selecionados["Chave API"],
@@ -1643,8 +1691,13 @@ def processar_marcacoes_com_cpf():
         return
 
     # Configuração da API
-    url_search = "https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople"
-    url_punch = "https://www.mdcomune.com.br/RestServiceApi/Mark/SetMarks"
+    if api_var.get() == "Kairos":
+        url_search = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople"
+        url_punch = "https://www.dimepkairos.com.br/RestServiceApi/Mark/SetMarks"
+    else:
+        url_search = "https://www.mdcomune.com.br/RestServiceApi/People/SearchPeople"
+        url_punch = "https://www.mdcomune.com.br/RestServiceApi/Mark/SetMarks"
+        
     headers = {
         "identifier": dados_selecionados["CNPJ"],
         "key": dados_selecionados["Chave API"],
@@ -1851,7 +1904,11 @@ def funcao_justificativa_get():
                 "key": dados_selecionados['Chave API'],
                 'User-Agent': 'PostmanRuntime/7.30.0'
             }
-            url = 'https://www.mdcomune.com.br/RestServiceApi/Justification/GetJustification'
+            if api_var.get() == "Kairos":
+                url = 'https://www.dimepkairos.com.br/RestServiceApi/Justification/GetJustification'
+            else:
+                url = 'https://www.mdcomune.com.br/RestServiceApi/Justification/GetJustification'
+                
             response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -1902,10 +1959,11 @@ def funcao_justificativa_get():
         messagebox.showinfo("Sucesso", "Justificativas selecionadas foram gravadas.")
         popup_futuro.destroy()
 
+    estilo_botao = "success" if api_var.get() == "Kairos" else "info"
     popup_futuro = tk.Toplevel(root)
     popup_futuro.title("Seleção de Justificativas")
     popup_futuro.geometry("400x380")
-    popup_futuro.iconbitmap("Mantis-Comune.ico")
+    popup_futuro.iconbitmap("Mantis-Kairos.ico")
 
     canvas = tk.Canvas(popup_futuro)
     scrollbar = ttk.Scrollbar(popup_futuro, orient="vertical", command=canvas.yview)
@@ -1930,7 +1988,7 @@ def funcao_justificativa_get():
     canvas.config(scrollregion=canvas.bbox("all"))
 
     ttk.Button(
-        popup_futuro, text="Gravar Seleção", command=gravar_justificativas, bootstyle="info"
+        popup_futuro, text="Gravar Seleção", command=gravar_justificativas, bootstyle=estilo_botao
     ).pack(pady=10)
 
     ttk.Button(
@@ -1984,7 +2042,12 @@ def carregar_ids_justificativas():
 
 def buscar_dados_funcionario(matricula):
     """Busca CPF e ID do funcionário pela matrícula."""
-    url = "https://www.mdcomune.com.br/RestServiceApi/People/SearchPerson"
+    
+    if api_var.get() == "Kairos":
+        url = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson"
+    else:
+        url = "https://www.mdcomune.com.br/RestServiceApi/People/SearchPerson"
+        
     headers = {
         'identifier': dados_selecionados["CNPJ"],
         'key': dados_selecionados["Chave API"],
@@ -2246,10 +2309,11 @@ def preencher_detalhes():
         messagebox.showerror("Erro", f"Erro ao preencher os detalhes: {e}")
 
 def abrir_popup_selecao_pessoas():
+    estilo_botao = "success" if api_var.get() == "Kairos" else "info"
     popup = ttk.Toplevel(root)
     popup.title("Selecione a função de envio")
     popup.geometry("500x400")
-    popup.iconbitmap("Mantis-Comune.ico")
+    popup.iconbitmap("Mantis-Kairos.ico")
     
     frame_popup = ttk.Frame(popup)
     frame_popup.pack(expand=True, fill="both", padx=10, pady=10)
@@ -2282,17 +2346,18 @@ def abrir_popup_selecao_pessoas():
         ttk.Checkbutton(frame_envio, text=nome, variable=var).grid(row=i, column=0, sticky="w", padx=10, pady=5)
 
     # Botão de iniciar coleta
-    ttk.Button(frame_popup, text="Iniciar Processo", command=lambda: iniciar_envio({**selecoes_pessoas, **selecoes_envio}, popup), bootstyle="info"
+    ttk.Button(frame_popup, text="Iniciar Processo", command=lambda: iniciar_envio({**selecoes_pessoas, **selecoes_envio}, popup), bootstyle=estilo_botao
         ).pack(pady=10)
     
     # Configurar o fechamento do popup
     popup.protocol("WM_DELETE_WINDOW", popup.destroy)
 
 def abrir_popup_selecao_coleta():
+    estilo_botao = "success" if api_var.get() == "Kairos" else "info"
     popup = ttk.Toplevel(root)
     popup.title("Selecione a planilha a coletar")
     popup.geometry("500x400")
-    popup.iconbitmap("Mantis-Comune.ico")
+    popup.iconbitmap("Mantis-Kairos.ico")
     
     # Frame principal
     frame_popup = ttk.Frame(popup)
@@ -2332,18 +2397,19 @@ def abrir_popup_selecao_coleta():
     # Botão de iniciar coleta
     ttk.Button(
         frame_popup, text="Iniciar Processo", 
-        command=lambda: iniciar_coleta({**selecoes_planilhas, **selecoes_cadastro}, popup), bootstyle="info"
+        command=lambda: iniciar_coleta({**selecoes_planilhas, **selecoes_cadastro}, popup), bootstyle=estilo_botao
     ).pack(pady=10)
 
     # Configurar o fechamento do popup
     popup.protocol("WM_DELETE_WINDOW", popup.destroy)
 
 def mostrar_duas_barras_progresso_paralelo(funcao1, funcao2, df, titulo="Processando"):
+    estilo_barra = "success" if api_var.get() == "Kairos" else "info"
     janela = tk.Toplevel()
     janela.title(titulo)
     janela.geometry("400x250")
     janela.resizable(False, False)
-    janela.iconbitmap("Mantis-Comune.ico")
+    janela.iconbitmap("Mantis-Kairos.ico")
 
     cancelar = threading.Event()
     
@@ -2353,13 +2419,13 @@ def mostrar_duas_barras_progresso_paralelo(funcao1, funcao2, df, titulo="Process
     label_status1 = tk.Label(janela, text="Iniciando envio de marcações...", font=("Arial", 12))
     label_status1.pack(pady=5)
 
-    barra1 = ttk.Progressbar(janela, orient="horizontal", bootstyle='info', mode="determinate", length=300)
+    barra1 = ttk.Progressbar(janela, orient="horizontal", bootstyle=estilo_barra, mode="determinate", length=300)
     barra1.pack(pady=5)
     
     label_status2 = tk.Label(janela, text="Iniciando envio de justificativas...", font=("Arial", 12))
     label_status2.pack(pady=5)
 
-    barra2 = ttk.Progressbar(janela, orient="horizontal", bootstyle='info', mode="determinate", length=300)
+    barra2 = ttk.Progressbar(janela, orient="horizontal", bootstyle=estilo_barra, mode="determinate", length=300)
     barra2.pack(pady=5)
 
     botao_cancelar = ttk.Button(janela, text="Cancelar", bootstyle='danger',command=cancelar.set)
@@ -2400,13 +2466,70 @@ def mostrar_duas_barras_progresso_paralelo(funcao1, funcao2, df, titulo="Process
     janela.grab_set()
     janela.mainloop()
 
+def alterar_tema(sistema):
+    """
+    Altera a cor dos botões com base no sistema selecionado.
+    Kairos -> Verde (success), MD Comune -> Azul (info)
+    """
+    estilo_botao = "success" if sistema == "Kairos" else "info"
+
+    # Remove os botões antigos
+    for widget in botao_frame.winfo_children():
+        widget.destroy()
+
+    # Recria os botões com o novo estilo
+    botoes_config = [
+        ("Tratamento", enviar_dados_combinados),
+        ("Pessoas", abrir_popup_selecao_pessoas),
+        ("Coleta de Planilhas", abrir_popup_selecao_coleta),
+        ("Selecionar Justificativas", funcao_justificativa_get)
+    ]
+    for i, (texto, comando) in enumerate(botoes_config):
+        ttk.Button(botao_frame, text=texto, command=comando, width=botao_width, bootstyle=estilo_botao).grid(
+            row=0, column=i, padx=10, pady=5
+        )
+
+    global date_entry_inicio, date_entry_fim
+
+    # Remove os widgets antigos
+    if "date_entry_inicio" in globals():
+        date_entry_inicio.destroy()
+    if "date_entry_fim" in globals():
+        date_entry_fim.destroy()
+
+    # Recria os widgets DateEntry com o novo estilo
+    ttk.Label(frame_campos, text="Data Início:").grid(row=5, column=0, padx=5, pady=5, sticky="w")
+    date_entry_inicio = DateEntry(
+        frame_campos,
+        width=12,
+        bootstyle=estilo_botao,
+        dateformat="%d/%m/%Y"
+    )
+    date_entry_inicio.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+    date_entry_inicio.entry.bind("<KeyRelease>", lambda e: formatar_data(e, date_entry_inicio))
+    date_entry_inicio.entry.bind("<FocusOut>", lambda e: validar_data(e, date_entry_inicio))
+
+    ttk.Label(frame_campos, text="Data Fim:").grid(row=6, column=0, padx=5, pady=5, sticky="w")
+    date_entry_fim = DateEntry(
+        frame_campos,
+        width=12,
+        bootstyle=estilo_botao,
+        dateformat="%d/%m/%Y"
+    )
+    date_entry_fim.grid(row=6, column=1, padx=5, pady=5, sticky="w")
+    date_entry_fim.entry.bind("<KeyRelease>", lambda e: formatar_data(e, date_entry_fim))
+    date_entry_fim.entry.bind("<FocusOut>", lambda e: validar_data(e, date_entry_fim))
+
+    # Log para a mudança de tema
+    exibir_log(f"Sistema {sistema} selecionado")
+
 #Interface
 
 root = ttk.Window(themename="darkly")
-root.title("Mantis - Comune")
-root.iconbitmap("Mantis-Comune.ico")
+root.title("Mantis - Kairos")
+root.iconbitmap("Mantis-Kairos.ico")
 
-style = ttk.Style("temamantis-comune") #Tema Personalidado (Alterar em caso de troca de sistema)
+style = ttk.Style("temamantis-kairos") #Tema Personalidado (Alterar em caso de troca de sistema)
 
 razao_social_var = tk.StringVar()
 cnpj_var = tk.StringVar()
@@ -2414,6 +2537,7 @@ chave_var = tk.StringVar()
 cpf_var = tk.StringVar()
 data_inicio_var = tk.StringVar()
 data_fim_var = tk.StringVar()
+api_var = tk.StringVar(value="Kairos")  # Variável para alternar entre APIs
 
 frame_selecao = ttk.Frame(root, padding=10)
 frame_selecao.grid(row=0, column=0, pady=10, padx=10, sticky="nsew")
@@ -2425,73 +2549,55 @@ frame_campos.grid(row=0, column=0, pady=10, padx=10)
 
 ttk.Label(root, text="Versão 0.8 (Teste)",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
-#Seleção do arquivo de empresa
+# Seletor da API
+frame_api = ttk.Frame(frame_campos)
+frame_api.grid(row=0, column=0, columnspan=4, pady=10)
+ttk.Label(frame_campos, text="Selecione o Sistema:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-ttk.Label(frame_campos, text="Selecione a Razão Social:",).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+kairos_button = ttk.Radiobutton(frame_api, text="Kairos", variable=api_var, value="Kairos",
+                                command=lambda: alterar_tema("Kairos"))
+kairos_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+mdcomune_button = ttk.Radiobutton(frame_api, text="MD Comune", variable=api_var, value="MDComune",
+                                  command=lambda: alterar_tema("MD Comune"))
+mdcomune_button.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+#Seleção do arquivo de empresa
+ttk.Label(frame_campos, text="Selecione a Razão Social:",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
 combo_razao_social = ttk.Combobox(frame_campos, textvariable=razao_social_var, width=40)
 combo_razao_social.set('Carregar o arquivo de Empresas')
 combo_razao_social.state(['readonly'])
-combo_razao_social.grid(row=0, column=1, padx=5, pady=5)
+combo_razao_social.grid(row=1, column=1, padx=5, pady=5)
 
 combo_razao_social.bind("<Button-1>", lambda e: combo_razao_social.event_generate("<Down>"))
-
 combo_razao_social.bind("<<ComboboxSelected>>", lambda e: preencher_detalhes())
 
-ttk.Label(frame_campos, text="CNPJ:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=cnpj_var, state='readonly', width=42).grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky="w")
+ttk.Label(frame_campos, text="CNPJ:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=cnpj_var, state='readonly', width=42).grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
 
-ttk.Button(frame_campos, text="Selecionar Arquivo", command=selecionar_arquivo_empresas, width=20, bootstyle="light").grid(row=0, column=3, padx=5, pady=5)
+ttk.Button(frame_campos, text="Selecionar Arquivo", command=selecionar_arquivo_empresas, width=20, bootstyle="light").grid(row=1, column=3, padx=5, pady=5)
 
-ttk.Label(frame_campos, text="Chave API:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=chave_var, state='readonly', width=42).grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="w")
+ttk.Label(frame_campos, text="Chave API:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=chave_var, state='readonly', width=42).grid(row=3, column=1, columnspan=3, padx=5, pady=5, sticky="w")
 
-ttk.Label(frame_campos, text="CPF Responsável:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
-ttk.Entry(frame_campos, textvariable=cpf_var, state='readonly', width=42).grid(row=3, column=1, columnspan=3, padx=5, pady=5, sticky="w")
-
-ttk.Label(frame_campos, text="Data Início:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
-date_entry_inicio = DateEntry(
-    frame_campos,
-    width=12,
-    bootstyle="info",
-    dateformat="%d/%m/%Y"
-)
-date_entry_inicio.grid(row=4, column=1, padx=5, pady=5, sticky="w")
-date_entry_inicio.entry.bind("<KeyRelease>", lambda e: formatar_data(e, date_entry_inicio))
-date_entry_inicio.entry.bind("<FocusOut>", lambda e: validar_data(e, date_entry_inicio))
-
-
-ttk.Label(frame_campos, text="Data Fim:").grid(row=5, column=0, padx=5, pady=5, sticky="w")
-date_entry_fim = DateEntry(
-    frame_campos,
-    width=12,
-    bootstyle="info",
-    dateformat="%d/%m/%Y"
-)
-date_entry_fim.grid(row=5, column=1, padx=5, pady=5, sticky="w")
-date_entry_fim.entry.bind("<KeyRelease>", lambda e: formatar_data(e, date_entry_fim))
-date_entry_fim.entry.bind("<FocusOut>", lambda e: validar_data(e, date_entry_fim))
+ttk.Label(frame_campos, text="CPF Responsável:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
+ttk.Entry(frame_campos, textvariable=cpf_var, state='readonly', width=42).grid(row=4, column=1, columnspan=3, padx=5, pady=5, sticky="w")
 
 ttk.Button(frame_campos, text="Gravar Info", command=confirmar_selecao, width=20, bootstyle="light").grid(row=5, column=3, padx=10)
 
 botao_frame = ttk.Frame(frame_selecao)
-botao_frame.grid(row=6, column=0, pady=15, sticky="ew")
+botao_frame.grid(row=7, column=0, pady=15, sticky="ew")
 
 for i in range(4):
     botao_frame.grid_columnconfigure(i, weight=1)
 
 botao_width = 25
 
-#Botões de Funções
-
-ttk.Button(botao_frame, text="Tratamento", command=enviar_dados_combinados, width=botao_width, bootstyle="info").grid(row=0, column=0, padx=10, pady=5)
-ttk.Button(botao_frame, text="Pessoas", command=abrir_popup_selecao_pessoas, width=botao_width, bootstyle="info").grid(row=0, column=1, padx=10, pady=5)
-ttk.Button(botao_frame, text="Coleta de Planilhas", command=abrir_popup_selecao_coleta, width=botao_width, bootstyle="info").grid(row=0, column=2, padx=10, pady=5)
-ttk.Button(botao_frame, text="Selecionar Justificativas", command=funcao_justificativa_get, width=botao_width, bootstyle="info").grid(row=0, column=3, padx=10, pady=5)
 
 #Frame do Log de envio e coleta
 
 frame_log = ttk.Frame(frame_selecao, padding=5)
-frame_log.grid(row=7, column=0, pady=10, padx=5, sticky="nsew")
+frame_log.grid(row=8, column=0, pady=10, padx=5, sticky="nsew")
 
 log_widget = tk.Text(frame_log, height=10, wrap="word", state="disabled", relief="solid", borderwidth=1)
 log_widget.grid(row=0, column=0, sticky="nsew")
@@ -2504,5 +2610,6 @@ frame_log.grid_columnconfigure(0, weight=1)
 frame_log.grid_rowconfigure(0, weight=1)
 
 #Loop para rodar a interface
+alterar_tema("Kairos")
 
 root.mainloop()
