@@ -14,6 +14,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import re
 import threading
+import os
 
 dados_selecionados = {}
 
@@ -75,7 +76,7 @@ def coleta_planilha_marcacoes_faltantes():
                 end_date = datetime.strptime(payload["DataFim"], "%d/%m/%Y")
                 full_date_range = generate_date_range(start_date, end_date)
 
-                justificativas = carregar_justificativas()
+                justificativas = carregar_justificativas_salvas(dados_selecionados["CNPJ"])
 
                 for item in data['Obj']:
                     fixed_data = {
@@ -135,64 +136,53 @@ def coleta_planilha_marcacoes_faltantes():
                 wb = openpyxl.load_workbook(output_path)
                 ws = wb.active
                 
-                if justificativas:
-                    justificativa_str = 'Folga,' + ','.join(justificativas)
-                    justificativa_validation = DataValidation(
-                        type='list', 
-                        formula1=f'"{justificativa_str}"', 
-                        allow_blank=True
-                    )
-                    justificativa_validation.error = 'Escolher valores da lista'
-                    justificativa_validation.errorTitle = 'Entrada Invalida'
-                    justificativa_validation.prompt = 'Selecione uma justificativa'
-                    justificativa_validation.promptTitle = 'Justificativas'
-                    
-                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
-                    justificativa_col_letter = get_column_letter(justificativa_col_index)
-                    ws.add_data_validation(justificativa_validation)
-                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+                justificativa_str = 'Folga,' + ','.join(justificativas)
+                justificativa_validation = DataValidation(
+                    type='list',
+                    formula1=f'"{justificativa_str}"',
+                    allow_blank=True
+                )
+                justificativa_validation.error = 'Escolher valores da lista'
+                justificativa_validation.errorTitle = 'Entrada Invalida'
+                justificativa_validation.prompt = 'Selecione uma justificativa'
+                justificativa_validation.promptTitle = 'Justificativas'
+                justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                justificativa_col_letter = get_column_letter(justificativa_col_index)
+                ws.add_data_validation(justificativa_validation)
+                justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
 
-                    for col in ws.columns:
-                        max_length = 0
-                        column = col[0].column_letter
-                        for cell in col:
-                            try:
-                                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-                            except:
-                                pass
-                        adjusted_width = (max_length + 2)
-                        ws.column_dimensions[column].width = adjusted_width
+                for col in ws.columns:
+                                max_length = 0
+                                column = col[0].column_letter
+                                for cell in col:
+                                    try:
+                                        if len(str(cell.value)) > max_length:
+                                            max_length = len(cell.value)
+                                    except:
+                                        pass
+                                adjusted_width = (max_length + 2)
+                                ws.column_dimensions[column].width = adjusted_width
 
-                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-                    
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            if cell.row % 2 == 0:
-                                cell.fill = fill_grey
-                            else:
-                                cell.fill = fill_white
+                fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                            
+                for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                    for cell in row:
+                        if cell.row % 2 == 0:
+                            cell.fill = fill_grey
+                        else:
+                            cell.fill = fill_white
                             cell.alignment = Alignment(horizontal="left", vertical="center")
-                        
-                    apply_borders(ws)
 
-                    wb.save(output_path)
-                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
-                else:
-                    print("Nenhuma justificativa selecionada.")
+                apply_borders(ws)
+                wb.save(output_path)
+                exibir_log(f"Arquivo Excel salvo com sucesso em {output_path}")
             else:
-                print("Nenhum dado no campo 'Obj'.")
+                exibir_log("Nenhum dado no campo 'Obj'.")
         except ValueError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print("Conteúdo da resposta:")
-            print(response.text)
+            exibir_log(f"Erro ao decodificar JSON: {e}")
     else:
-        print(f"Falha: {response.status_code}")
-        print(response.text)
-    
-    exibir_log(f'Planilha de faltas e atrasos salva em {output_path}')
-    print(payload)
+        exibir_log(f"Falha: {response.status_code} - {response.text}")
 
 def coleta_planilha_marcacoes_inconsistencia():
     output_path = filedialog.asksaveasfilename(
@@ -245,7 +235,7 @@ def coleta_planilha_marcacoes_inconsistencia():
             if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
                 
-                justificativas = carregar_justificativas()
+                justificativas = carregar_justificativas_salvas(dados_selecionados["CNPJ"])
                 
                 for item in data['Obj']:
                     fixed_data = {
@@ -290,64 +280,53 @@ def coleta_planilha_marcacoes_inconsistencia():
                 wb = openpyxl.load_workbook(output_path)
                 ws = wb.active
 
-                if justificativas:
-                    justificativa_str = 'Folga,' + ','.join(justificativas)
-                    justificativa_validation = DataValidation(
-                        type='list', 
-                        formula1=f'"{justificativa_str}"', 
-                        allow_blank=True
-                    )
-                    justificativa_validation.error = 'Escolher valores da lista'
-                    justificativa_validation.errorTitle = 'Entrada Invalida'
-                    justificativa_validation.prompt = 'Selecione uma justificativa'
-                    justificativa_validation.promptTitle = 'Justificativas'
-                    
-                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
-                    justificativa_col_letter = get_column_letter(justificativa_col_index)
-                    ws.add_data_validation(justificativa_validation)
-                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
-                    
-                    for col in ws.columns:
-                        max_length = 0
-                        column = col[0].column_letter
-                        for cell in col:
-                            try:
-                                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-                            except:
-                                pass
-                        adjusted_width = (max_length + 2)
-                        ws.column_dimensions[column].width = adjusted_width
+                justificativa_str = 'Folga,' + ','.join(justificativas)
+                justificativa_validation = DataValidation(
+                    type='list',
+                    formula1=f'"{justificativa_str}"',
+                    allow_blank=True
+                )
+                justificativa_validation.error = 'Escolher valores da lista'
+                justificativa_validation.errorTitle = 'Entrada Invalida'
+                justificativa_validation.prompt = 'Selecione uma justificativa'
+                justificativa_validation.promptTitle = 'Justificativas'
+                justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                justificativa_col_letter = get_column_letter(justificativa_col_index)
+                ws.add_data_validation(justificativa_validation)
+                justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
 
-                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-                    
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            if cell.row % 2 == 0:
-                                cell.fill = fill_grey
-                            else:
-                                cell.fill = fill_white
+                for col in ws.columns:
+                                max_length = 0
+                                column = col[0].column_letter
+                                for cell in col:
+                                    try:
+                                        if len(str(cell.value)) > max_length:
+                                            max_length = len(cell.value)
+                                    except:
+                                        pass
+                                adjusted_width = (max_length + 2)
+                                ws.column_dimensions[column].width = adjusted_width
+
+                fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                            
+                for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                    for cell in row:
+                        if cell.row % 2 == 0:
+                            cell.fill = fill_grey
+                        else:
+                            cell.fill = fill_white
                             cell.alignment = Alignment(horizontal="left", vertical="center")
-                        
-                    apply_borders(ws)
 
-                    wb.save(output_path)
-                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
-                else:
-                    print("Nenhuma justificativa selecionada.")
+                apply_borders(ws)
+                wb.save(output_path)
+                exibir_log(f"Arquivo Excel salvo com sucesso em {output_path}")
             else:
-                print("Nenhum dado no campo 'Obj'.")
+                exibir_log("Nenhum dado no campo 'Obj'.")
         except ValueError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print("Conteúdo da resposta:")
-            print(response.text)
+            exibir_log(f"Erro ao decodificar JSON: {e}")
     else:
-        print(f"Falha: {response.status_code}")
-        print(response.text)
-    
-    exibir_log(f'Planilha de Inconsistencias salva em {output_path}')
-    print(payload)
+        exibir_log(f"Falha: {response.status_code} - {response.text}")
 
 def coleta_planilha_marcacoes_incomum():
     output_path = filedialog.asksaveasfilename(
@@ -400,7 +379,7 @@ def coleta_planilha_marcacoes_incomum():
             if "Obj" in data and isinstance(data['Obj'], list) and len(data['Obj']) > 0:
                 all_entries = []
                 
-                justificativas = carregar_justificativas()
+                justificativas = carregar_justificativas_salvas(dados_selecionados["CNPJ"])
                 
                 for item in data['Obj']:
                     fixed_data = {
@@ -445,23 +424,22 @@ def coleta_planilha_marcacoes_incomum():
                         wb = openpyxl.load_workbook(output_path)
                         ws = wb.active
 
-                        if justificativas:
-                            justificativa_str = 'Folga,' + ','.join(justificativas)
-                            justificativa_validation = DataValidation(
-                                type='list', 
-                                formula1=f'"{justificativa_str}"', 
+                        justificativa_str = 'Folga,' + ','.join(justificativas)
+                        justificativa_validation = DataValidation(
+                                type='list',
+                                formula1=f'"{justificativa_str}"',
                                 allow_blank=True
                             )
-                            justificativa_validation.error = 'Escolher valores da lista'
-                            justificativa_validation.errorTitle = 'Entrada Invalida'
-                            justificativa_validation.prompt = 'Selecione uma justificativa'
-                            justificativa_validation.promptTitle = 'Justificativas'
-                            justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
-                            justificativa_col_letter = get_column_letter(justificativa_col_index)
-                            ws.add_data_validation(justificativa_validation)
-                            justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+                        justificativa_validation.error = 'Escolher valores da lista'
+                        justificativa_validation.errorTitle = 'Entrada Invalida'
+                        justificativa_validation.prompt = 'Selecione uma justificativa'
+                        justificativa_validation.promptTitle = 'Justificativas'
+                        justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                        justificativa_col_letter = get_column_letter(justificativa_col_index)
+                        ws.add_data_validation(justificativa_validation)
+                        justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
                             
-                            for col in ws.columns:
+                        for col in ws.columns:
                                 max_length = 0
                                 column = col[0].column_letter
                                 for cell in col:
@@ -473,37 +451,26 @@ def coleta_planilha_marcacoes_incomum():
                                 adjusted_width = (max_length + 2)
                                 ws.column_dimensions[column].width = adjusted_width
 
-                            fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                            fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                        fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                        fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
                             
-                            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                                for cell in row:
-                                    if cell.row % 2 == 0:
-                                        cell.fill = fill_grey
-                                    else:
-                                        cell.fill = fill_white
+                        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                            for cell in row:
+                                if cell.row % 2 == 0:
+                                    cell.fill = fill_grey
+                                else:
+                                    cell.fill = fill_white
                                     cell.alignment = Alignment(horizontal="left", vertical="center")
-                                    
-                        apply_borders(ws)
-                        wb.save(output_path)
-                        exibir_log(f'Planilha de Ponto Incomum da empresa {dados_selecionados["Razão Social"]} em {output_path}')
-                    else:
-                        exibir_log("Não há marcações incomuns para salvar.")
-                    
-                else:
-                    exibir_log("Nenhuma marcação válida encontrada para o período especificado.")
+
+                apply_borders(ws)
+                wb.save(output_path)
+                exibir_log(f"Arquivo Excel salvo com sucesso em {output_path}")
             else:
-                exibir_log("Nenhum dado disponível no campo 'Obj'.")
+                exibir_log("Nenhum dado no campo 'Obj'.")
         except ValueError as e:
             exibir_log(f"Erro ao decodificar JSON: {e}")
-            exibir_log("Conteúdo da resposta:")
-            exibir_log(response.text)
     else:
-        exibir_log(f"Falha: {response.status_code}")
-        exibir_log(response.text)
-        
-    if response.status_code == 200 and ('Obj' not in data or not data['Obj']):
-        exibir_log("Não há dados válidos para salvar a planilha.")
+        exibir_log(f"Falha: {response.status_code} - {response.text}")
 
 def coleta_planilha_marcacoes():
     output_path = filedialog.asksaveasfilename(
@@ -513,7 +480,7 @@ def coleta_planilha_marcacoes():
     )
 
     url = 'https://www.dimepkairos.com.br/RestServiceApi/ReportEmployeePunch/GetReportEmployeePunch'
-    
+
     headers = {
         "identifier": dados_selecionados["CNPJ"],
         "key": dados_selecionados["Chave API"],
@@ -526,13 +493,12 @@ def coleta_planilha_marcacoes():
         "DataFim": dados_selecionados["Data fim"],
         "ResponseType": "AS400V1"
     }
-    
+
     try:
-        # Verificar o intervalo de datas
         start_date = datetime.strptime(payload["DataInicio"], "%d/%m/%Y")
         end_date = datetime.strptime(payload["DataFim"], "%d/%m/%Y")
         delta_days = (end_date - start_date).days
-        
+
         if delta_days > 90:
             messagebox.showerror(
                 "Erro de Intervalo de Datas",
@@ -542,10 +508,7 @@ def coleta_planilha_marcacoes():
             return
 
     except Exception as e:
-        messagebox.showerror(
-            "Erro de Datas",
-            f"Erro ao validar as datas: {e}"
-        )
+        messagebox.showerror("Erro de Datas", f"Erro ao validar as datas: {e}")
         return
 
     response = requests.post(url, json=payload, headers=headers)
@@ -555,11 +518,15 @@ def coleta_planilha_marcacoes():
             data = response.json()
             if "Obj" in data and isinstance(data['Obj'], list):
                 all_entries = []
-                all_fixed_data = []
-
                 full_date_range = generate_date_range(start_date, end_date)
 
-                justificativas = carregar_justificativas()
+                # Ajuste aqui para carregar justificativas com o nome correto
+                justificativas = carregar_justificativas_salvas(dados_selecionados["CNPJ"])
+
+                if not justificativas:
+                    messagebox.showwarning("Aviso", "Nenhuma justificativa salva encontrada. Por favor, selecione justificativas.")
+                    exibir_log("Nenhuma justificativa encontrada para a planilha.")
+                    return
 
                 for item in data['Obj']:
                     fixed_data = {
@@ -590,7 +557,7 @@ def coleta_planilha_marcacoes():
                                 'Horario': '',
                                 'Apontamentos': ''
                             }
-                            
+
                         combined_data = {**fixed_data, **entry_data}
                         all_entries.append(combined_data)
 
@@ -607,62 +574,53 @@ def coleta_planilha_marcacoes():
                 wb = openpyxl.load_workbook(output_path)
                 ws = wb.active
 
-                if justificativas:
-                    justificativa_str = 'Folga,' + ','.join(justificativas)
-                    justificativa_validation = DataValidation(
-                        type='list', 
-                        formula1=f'"{justificativa_str}"', 
-                        allow_blank=True
-                    )
-                    justificativa_validation.error = 'Escolher valores da lista'
-                    justificativa_validation.errorTitle = 'Entrada Invalida'
-                    justificativa_validation.prompt = 'Selecione uma justificativa'
-                    justificativa_validation.promptTitle = 'Justificativas'
-                    justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
-                    justificativa_col_letter = get_column_letter(justificativa_col_index)
-                    ws.add_data_validation(justificativa_validation)
-                    justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
+                justificativa_str = 'Folga,' + ','.join(justificativas)
+                justificativa_validation = DataValidation(
+                    type='list',
+                    formula1=f'"{justificativa_str}"',
+                    allow_blank=True
+                )
+                justificativa_validation.error = 'Escolher valores da lista'
+                justificativa_validation.errorTitle = 'Entrada Invalida'
+                justificativa_validation.prompt = 'Selecione uma justificativa'
+                justificativa_validation.promptTitle = 'Justificativas'
+                justificativa_col_index = final_df.columns.get_loc("Justificativa") + 1
+                justificativa_col_letter = get_column_letter(justificativa_col_index)
+                ws.add_data_validation(justificativa_validation)
+                justificativa_validation.add(f'{justificativa_col_letter}2:{justificativa_col_letter}{len(final_df)+1}')
 
-                    for col in ws.columns:
-                        max_length = 0
-                        column = col[0].column_letter
-                        for cell in col:
-                            try:
-                                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-                            except:
-                                pass
-                        adjusted_width = (max_length + 2)
-                        ws.column_dimensions[column].width = adjusted_width
-                        
-                    fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-                    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-                    
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            if cell.row % 2 == 0:
-                                cell.fill = fill_grey
-                            else:
-                                cell.fill = fill_white
+                for col in ws.columns:
+                                max_length = 0
+                                column = col[0].column_letter
+                                for cell in col:
+                                    try:
+                                        if len(str(cell.value)) > max_length:
+                                            max_length = len(cell.value)
+                                    except:
+                                        pass
+                                adjusted_width = (max_length + 2)
+                                ws.column_dimensions[column].width = adjusted_width
+
+                fill_grey = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+                fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                            
+                for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                    for cell in row:
+                        if cell.row % 2 == 0:
+                            cell.fill = fill_grey
+                        else:
+                            cell.fill = fill_white
                             cell.alignment = Alignment(horizontal="left", vertical="center")
-                        
-                    apply_borders(ws)
-                    wb.save(output_path)
-                    print(f"Arquivo Excel salvo com sucesso em {output_path}")
-                else:
-                    print("Nenhuma justificativa selecionada.")
+
+                apply_borders(ws)
+                wb.save(output_path)
+                exibir_log(f"Arquivo Excel salvo com sucesso em {output_path}")
             else:
-                print("Nenhum dado no campo 'Obj'.")
+                exibir_log("Nenhum dado no campo 'Obj'.")
         except ValueError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print("Conteúdo da resposta:")
-            print(response.text)
+            exibir_log(f"Erro ao decodificar JSON: {e}")
     else:
-        print(f"Falha: {response.status_code}")
-        print(response.text)
-    
-    exibir_log(f'Planilha de Marcação da empresa {dados_selecionados["Razão Social"]} salva em {output_path}')
-    print(payload)
+        exibir_log(f"Falha: {response.status_code} - {response.text}")
 
 def coleta_empresa():
     url1= 'https://www.dimepkairos.com.br/RestServiceApi/CalculationRules/GetCalculationRulesSummary' # Cálculo
@@ -856,59 +814,62 @@ def coleta_planilha_ferias():
     exibir_log(f'Planilha de férias salva em {output_path}')
 
 def alteracao_pessoas():
-    url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
-    payload = {
-        "Matricula": 0 
-    }
-    headers = {
-        "identifier": dados_selecionados['CNPJ'],
-        "key": dados_selecionados['Chave API'],
-        'User-Agent': 'PostmanRuntime/7.30.0'
-    }
-    
-    df = get_data_from_api(url, payload, headers)
-    df = df.add_prefix('People_')
-    
-    selected_colomns =[
-        'People_Id', 'People_Matricula', 'People_Cracha', 'People_Nome', 'People_DataNascimento', 'People_DataAdmissao',
-    'People_Rg', 'People_Cpf', 'People_Email', 'People_BaseHoras', 'People_CodigoPis', 'People_Sexo', 'People_PessoaStatus', 'People_Estrutura.Id', 'People_Estrutura.Codigo',  'People_TipoSalario.Id',
-    'People_Cargo.Id'
-    ]
-
-    for col in selected_colomns:
-        if col not in df.columns:
-            df[col] = None
-    
-    
-    df_filtrado = df[selected_colomns]
-    df_filtrado = aplicar_estilo()
-    
+    """Exporta os dados de pessoas para um arquivo Excel para alterações."""
     output_path = filedialog.asksaveasfilename(
         defaultextension=".xlsx",
         filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
         title="Salvar Pessoas para alteração em:"
     )
-    
-    df_filtrado.to_excel(output_path, index=False)
-    
-    wb = openpyxl.load_workbook(output_path)
-    ws = wb.active
-    for col in ws.columns:
-        max_length = 0
-    column = col[0].column_letter
-    for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                                    max_length = len(cell.value)
-            except:
-                pass
-            
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column].width = adjusted_width
+    if not output_path:
+        exibir_log("Nenhum local de salvamento foi selecionado.")
+        return
 
-    wb.save(output_path)
-    
-    exibir_log(f'Planilha de funcionários salva em {output_path}')
+    url = 'https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople'
+    payload = {"Matricula": 0}
+    headers = {
+        "identifier": dados_selecionados["CNPJ"],
+        "key": dados_selecionados["Chave API"],
+        "User-Agent": "PostmanRuntime/7.30.0"
+    }
+
+    try:
+        # Obtém os dados da API
+        df = get_data_from_api(url, payload, headers)
+        if df.empty:
+            exibir_log("Nenhum dado retornado pela API.")
+            messagebox.showwarning("Atenção", "Nenhum dado foi retornado pela API.")
+            return
+
+        # Adiciona prefixo às colunas
+        df = df.add_prefix('People_')
+
+        # Colunas necessárias para o arquivo
+        selected_columns = [
+            'People_Id', 'People_Matricula', 'People_Cracha', 'People_Nome',
+            'People_DataNascimento', 'People_DataAdmissao', 'People_Rg', 
+            'People_Cpf', 'People_Email', 'People_BaseHoras', 'People_CodigoPis', 
+            'People_Sexo', 'People_PessoaStatus', 'People_Estrutura.Id', 
+            'People_Estrutura.Codigo', 'People_TipoSalario.Id', 'People_Cargo.Id'
+        ]
+
+        # Adiciona colunas ausentes ao DataFrame
+        for col in selected_columns:
+            if col not in df.columns:
+                df[col] = None
+
+        # Filtra as colunas desejadas
+        df_filtrado = df[selected_columns]
+
+        # Salva o DataFrame em Excel
+        df_filtrado.to_excel(output_path, index=False)
+
+        aplicar_estilo(output_path)
+        exibir_log(f"Planilha de funcionários salva em {output_path}")
+        messagebox.showinfo("Sucesso", f"Planilha salva em:\n{output_path}")
+
+    except Exception as e:
+        exibir_log(f"Erro ao processar: {e}")
+        messagebox.showerror("Erro", f"Erro ao processar os dados: {e}")
 
 def processar_marcacoes(df, barra, label_status, cancelar):
     if df.empty:
@@ -957,7 +918,7 @@ def processar_marcacoes(df, barra, label_status, cancelar):
                     response = requests.post(url, json=payload, headers=headers)
                     status = "Sucesso" if response.status_code == 200 else "Falha"
                     mensagem = response.json().get("Mensagem", "Erro desconhecido") if response.ok else response.text
-                    exibir_log(f"Marcação de {tipo} enviada para matrícula {matricula}: {status} - {mensagem}")
+                    exibir_log(f"Marcação de {tipo} enviada para matrícula {matricula} na data {data_hora_marcacao}: {status} - {mensagem}")
 
         if barra and not cancelar.is_set():
             barra.step(1)
@@ -970,7 +931,6 @@ def processar_marcacoes(df, barra, label_status, cancelar):
         messagebox.showinfo("Sucesso", "Envio de marcações concluído.")
     else:
         exibir_log("Envio de marcações interrompido.")
-
 
 def enviar_dados_combinados():
     caminho_arquivo = filedialog.askopenfilename(
@@ -991,6 +951,57 @@ def enviar_dados_combinados():
     mostrar_duas_barras_progresso_paralelo(processar_marcacoes, processar_arquivo_excel, df, titulo="Enviando Dados")
     exibir_log(f"Tratamento da empresa {dados_selecionados['Razão Social']} concluído")
 
+def coleta_cargos():
+    try:
+        output_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            title="Salvar planilha de cargos em:"
+        )
+        
+        if not output_path:
+            exibir_log("Operação cancelada pelo usuário.")
+            return
+        
+        url = 'https://www.dimepkairos.com.br/RestServiceApi/JobPosition/SearchJobPosition'
+        payload = {}
+        headers = {
+            "identifier": dados_selecionados['CNPJ'],
+            "key": dados_selecionados['Chave API'],
+            'User-Agent': 'PostmanRuntime/7.30.0'
+        }
+        
+        df = get_data_from_api(url, payload, headers)
+        
+        if df.empty:
+            exibir_log("Nenhum dado retornado pela API.")
+            messagebox.showinfo("Aviso", "Nenhum cargo foi retornado pela API.")
+            return
+
+        required_columns = ['Id', 'Codigo', 'Descricao']
+        selected_columns = [col for col in required_columns if col in df.columns]
+
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = None
+
+        final_df = df[required_columns]
+        final_df_2 = pd.DataFrame(final_df)
+        final_df_2["Codigo(Novo Cargo)"] = ''
+        final_df_2["Descricao(Novo Cargo)"] = ''
+        final_df_2.to_excel(output_path, index=False)
+        aplicar_estilo(output_path)
+
+        exibir_log(f'Planilha de cargos salva em {output_path}')
+    
+    except requests.RequestException as e:
+        exibir_log(f"Erro ao conectar à API: {e}")
+        messagebox.showerror("Erro", f"Erro ao conectar à API: {e}")
+    
+    except Exception as e:
+        exibir_log(f"Erro durante a coleta de cargos: {e}")
+        messagebox.showerror("Erro", f"Erro durante a coleta de cargos: {e}")
+    
 #Funções de Tratamento de ponto (Envio)
 
 def enviar_justificativa(matricula, id_funcionario, id_justificativa, descricao, data, qtd_horas):
@@ -1087,6 +1098,14 @@ def envio_planilha_desligamento():
             mensagem = str(e)
 
         resultados.append([Matricula, status, mensagem])
+    if resultados:
+        sucesso = len([res for res in resultados if res[1] == "Sucesso"])
+        falha = len([res for res in resultados if res[1] != "Sucesso"])
+        exibir_log(f"Processo finalizado. Sucessos: {sucesso}, Falhas: {falha}")
+        messagebox.showinfo(
+        "Resumo do Cadastro",
+        f"Processo concluído:\nSucessos: {sucesso}\nFalhas: {falha}"
+        )
 
 def envio_planilha_ferias():
     caminho_arquivo = filedialog.askopenfilename(
@@ -1160,6 +1179,15 @@ def envio_planilha_ferias():
             mensagem = str(e)
 
         resultados.append([Matricula, status, mensagem])
+        
+    if resultados:
+        sucesso = len([res for res in resultados if res[1] == "Sucesso"])
+        falha = len([res for res in resultados if res[1] != "Sucesso"])
+        exibir_log(f"Processo finalizado. Sucessos: {sucesso}, Falhas: {falha}")
+        messagebox.showinfo(
+        "Resumo do Cadastro",
+        f"Processo concluído:\nSucessos: {sucesso}\nFalhas: {falha}"
+        )
 
 def cadastrar_pessoas():
     caminho_arquivo = filedialog.askopenfilename(
@@ -1274,6 +1302,14 @@ def cadastrar_pessoas():
             
         resultados.append([Matricula, status, mensagem])
         exibir_log(f"Matricula: {Matricula} | Status: {status} | Mensagem: {mensagem}")
+    if resultados:
+        sucesso = len([res for res in resultados if res[1] == "Sucesso"])
+        falha = len([res for res in resultados if res[1] != "Sucesso"])
+        exibir_log(f"Processo finalizado. Sucessos: {sucesso}, Falhas: {falha}")
+        messagebox.showinfo(
+        "Resumo do Cadastro",
+        f"Processo concluído:\nSucessos: {sucesso}\nFalhas: {falha}"
+        )
 
 def alteracao_pessoas_envio():
     
@@ -1383,6 +1419,103 @@ def alteracao_pessoas_envio():
         resultados.append([Matricula, status, mensagem])
         
         exibir_log(f"Matricula: {Matricula} | Status: {status} | Mensagem: {mensagem}")
+    if resultados:
+        sucesso = len([res for res in resultados if res[1] == "Sucesso"])
+        falha = len([res for res in resultados if res[1] != "Sucesso"])
+        exibir_log(f"Processo finalizado. Sucessos: {sucesso}, Falhas: {falha}")
+        messagebox.showinfo(
+        "Resumo do Cadastro",
+        f"Processo concluído:\nSucessos: {sucesso}\nFalhas: {falha}"
+        )
+
+def cadastro_cargo():
+    """Cadastra cargos na API usando dados de um arquivo Excel."""
+    caminho_arquivo = filedialog.askopenfilename(
+        title="Selecione o arquivo de cadastro de cargos",
+        filetypes=[("Arquivo Excel", "*.xlsx *.xls")]
+    )
+    if not caminho_arquivo:
+        exibir_log("Nenhum arquivo selecionado.")
+        return
+
+    try:
+        df = pd.read_excel(caminho_arquivo)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao ler o arquivo: {e}")
+        exibir_log(f"Erro ao carregar o arquivo: {e}")
+        return
+
+    # Verifica se as colunas necessárias estão presentes
+    colunas_necessarias = ["Codigo(Novo Cargo)", "Descricao(Novo Cargo)"]
+    if not all(col in df.columns for col in colunas_necessarias):
+        messagebox.showerror(
+            "Erro", f"O arquivo deve conter as colunas: {', '.join(colunas_necessarias)}"
+        )
+        exibir_log(f"Arquivo inválido. Colunas esperadas: {colunas_necessarias}")
+        return
+
+    resultados = []
+    df = df.fillna("")  # Substitui valores NaN por strings vazias
+    url = "https://www.dimepkairos.com.br/RestServiceApi/JobPosition/SaveJobPosition"
+    headers = {
+        "identifier": dados_selecionados["CNPJ"],
+        "key": dados_selecionados["Chave API"],
+        "User-Agent": "PostmanRuntime/7.30.0"
+    }
+
+    for index, row in df.iterrows():
+        try:
+            codigo = row["Codigo(Novo Cargo)"]
+            descricao = row["Descricao(Novo Cargo)"]
+            
+            if pd.notna(codigo):
+                codigo = str(int(float(codigo))) if isinstance(codigo, (float, int)) else str(codigo)
+
+            # Ignorar linhas com valores obrigatórios faltando
+            if not codigo or not descricao:
+                exibir_log(f"Linha {index + 1} ignorada: Código ou Descrição ausente.")
+                continue
+
+            payload = {
+                "Codigo": codigo,
+                "Descricao": str(descricao).strip()
+            }
+            print (payload)
+            response = requests.post(url, json=payload, headers=headers)
+
+            # Verifica a resposta da API
+            if response.status_code == 200:
+                response_json = response.json()
+                if response_json.get("Sucesso"):
+                    status = "Sucesso"
+                    mensagem = response_json.get("Mensagem", "Cadastro realizado com sucesso.")
+                    exibir_log(f"Cargo '{descricao}' cadastrado com sucesso.")
+                else:
+                    status = "Falha"
+                    mensagem = response_json.get("Mensagem", "Erro desconhecido.")
+                    exibir_log(f"Falha ao cadastrar cargo '{descricao}': {mensagem}")
+            else:
+                status = "Erro"
+                mensagem = f"Erro de comunicação com a API: {response.status_code}"
+                exibir_log(f"Erro ao cadastrar cargo '{descricao}': {mensagem}")
+
+        except Exception as e:
+            status = "Erro"
+            mensagem = str(e)
+            exibir_log(f"Erro ao processar linha {index + 1}: {mensagem}")
+
+        # Armazena o resultado da linha
+        resultados.append([descricao, status, mensagem])
+
+    # Mostra um resumo dos resultados
+    if resultados:
+        sucesso = len([res for res in resultados if res[1] == "Sucesso"])
+        falha = len([res for res in resultados if res[1] != "Sucesso"])
+        exibir_log(f"Processo finalizado. Sucessos: {sucesso}, Falhas: {falha}")
+        messagebox.showinfo(
+            "Resumo do Cadastro",
+            f"Processo concluído:\nSucessos: {sucesso}\nFalhas: {falha}"
+        )
 
 #Funções Auxiliares
 
@@ -1433,10 +1566,19 @@ def iniciar_coleta(selecoes, popup):
 
     for nome, (var, func) in selecoes.items():
         if var.get():
-            exibir_log(f"{nome} sendo coletado para {dados_selecionados['Razão Social']}")
+            exibir_log(f"Função: {nome} sendo realizada para Empresa: {dados_selecionados['Razão Social']}")
             func()
 
-    messagebox.showinfo("Concluido", "Função Executada com Sucesso")
+    messagebox.showinfo("Concluido", "Processo de coleta realizado com sucesso")
+    
+def iniciar_envio(selecoes, popup):
+    """Inicia a coleta com base nas seleções."""
+    popup.destroy()
+
+    for nome, (var, func) in selecoes.items():
+        if var.get():
+            exibir_log(f"Função: {nome} sendo realizada para Empresa: {dados_selecionados['Razão Social']}")
+            func()
 
 def apply_borders(ws):
     thin_border = Border(
@@ -1688,10 +1830,18 @@ def combinar_data_hora(data_completa, hora, tipo_marcacao="", horario_intervalo=
                 return None
     return None
 
+if not os.path.exists("justificativas"):
+    os.makedirs("justificativas")
+    
 def funcao_justificativa_get():
+
     if not dados_selecionados.get('CNPJ') or not dados_selecionados.get('Chave API'):
         messagebox.showerror("Erro", "Nenhuma empresa selecionada. Selecione uma empresa antes de carregar justificativas.")
         return
+
+    # Substituir caracteres inválidos no nome do arquivo
+    cnpj = dados_selecionados['CNPJ'].replace("/", "-")
+    arquivo_justificativas = os.path.join("justificativas", f"{cnpj}_justificativas.txt")
 
     def carregar_justificativas():
         try:
@@ -1706,38 +1856,49 @@ def funcao_justificativa_get():
             response.raise_for_status()
             data = response.json()
 
+            justificativas = [
+                f"{item['Id']}|{item['Description']}"
+                for item in data.get("Obj", [])
+            ]
+
             for widget in frame_checkboxes.winfo_children():
                 widget.destroy()
 
-            for item in data.get("Obj", []):
-                var = tk.BooleanVar()
-                checkbox = ttk.Checkbutton(
-                    frame_checkboxes,
-                    text=f"{item['Description']} (ID: {item['Id']})",
-                    variable=var
-                )
-                checkbox.grid(sticky="w", padx=10, pady=5)
-                justificativas_selecionadas[item['Id']] = (var, item['Description'])
+            for linha in justificativas:
+                try:
+                    id_justificativa, descricao = linha.strip().split("|", 1)
+                    var = tk.BooleanVar()
+                    checkbox = ttk.Checkbutton(
+                        frame_checkboxes,
+                        text=f"{descricao} (ID: {id_justificativa})",
+                        variable=var
+                    )
+                    checkbox.grid(sticky="w", padx=10, pady=5)
+                    justificativas_selecionadas[int(id_justificativa)] = (var, descricao)
+                except ValueError:
+                    continue
 
         except requests.RequestException as e:
-            exibir_log(f"Erro ao carregar justificativas: {e}")
             messagebox.showerror("Erro", f"Erro ao carregar justificativas: {e}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro inesperado: {e}")
 
     def gravar_justificativas():
-        selecionadas = [(id_justificativa, descricao) for id_justificativa, (var, descricao) in justificativas_selecionadas.items() if var.get()]
-        
+        selecionadas = [
+            f"{id_justificativa}|{descricao}"
+            for id_justificativa, (var, descricao) in justificativas_selecionadas.items() if var.get()
+        ]
+
         if not selecionadas:
             messagebox.showwarning("Atenção", "Nenhuma justificativa selecionada.")
             return
-        
-        with open("justificativas_selecionadas.txt", "w") as f:
-            for _, descricao in selecionadas:
-                f.write(f"{descricao}\n")
-        
-        with open("justificativas_ids_descricoes.txt", "w") as f:
-            for id_justificativa, descricao in selecionadas:
-                f.write(f"{id_justificativa},{descricao}\n")
-        
+
+        if not os.path.exists("justificativas"):
+            os.makedirs("justificativas")
+
+        with open(arquivo_justificativas, "w", encoding="utf-8") as f:
+            f.write("\n".join(selecionadas))
+
         messagebox.showinfo("Sucesso", "Justificativas selecionadas foram gravadas.")
         popup_futuro.destroy()
 
@@ -1775,6 +1936,24 @@ def funcao_justificativa_get():
     ttk.Button(
         popup_futuro, text="Fechar", command=popup_futuro.destroy, bootstyle="danger"
     ).pack(pady=10)
+
+def carregar_justificativas_salvas(cnpj):
+    # Substituir barras por hífens no CNPJ para evitar problemas de nomes de arquivo
+    cnpj_formatado = cnpj.replace("/", "-")
+    arquivo_justificativas = os.path.join("justificativas", f"{cnpj_formatado}_justificativas.txt")
+
+    if not os.path.exists(arquivo_justificativas):
+        exibir_log(f"Arquivo de justificativas não encontrado para o CNPJ: {cnpj}")
+        return []
+
+    try:
+        with open(arquivo_justificativas, "r", encoding="utf-8") as f:
+            linhas = f.readlines()
+        justificativas = [linha.strip().split("|")[1] for linha in linhas if "|" in linha]
+        return justificativas
+    except Exception as e:
+        exibir_log(f"Erro ao carregar justificativas: {e}")
+        return []
 
 def selecionar_arquivo_empresas():
     caminho_arquivo = filedialog.askopenfilename(
@@ -1839,15 +2018,43 @@ def validar_horas(qtd_horas):
         except ValueError:
             return "12:00"
 
+def carregar_justificativas_salvas_envio(cnpj):
+    cnpj_formatado = cnpj.replace("/", "-")
+    arquivo_justificativas = os.path.join("justificativas", f"{cnpj_formatado}_justificativas.txt")
+    if not os.path.exists(arquivo_justificativas):
+        exibir_log(f"Arquivo de justificativas não encontrado para o CNPJ {cnpj}.")
+        return {}
+
+    ids_justificativas = {}
+    try:
+        with open(arquivo_justificativas, "r", encoding="utf-8") as f:
+            for linha in f:
+                try:
+                    id_justificativa, descricao = linha.strip().split("|", 1)
+                    ids_justificativas[descricao] = int(id_justificativa)
+                except ValueError:
+                    continue
+    except Exception as e:
+        exibir_log(f"Erro ao carregar justificativas salvas: {e}")
+        return {}
+
+    return ids_justificativas
+
 def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
     if df.empty:
         exibir_log("Arquivo vazio. Operação abortada.")
         return
 
-    ids_justificativas = carregar_ids_justificativas()
+    # Carrega o arquivo de justificativas do CNPJ
+    cnpj = dados_selecionados['CNPJ']
+    ids_justificativas = carregar_justificativas_salvas_envio(cnpj)
 
-    tem_folga = any(row.get('Justificativa') == "Folga" for index, row in df.iterrows())
+    if not ids_justificativas:
+        exibir_log(f"Justificativas não encontradas para o CNPJ {cnpj}. Carregue as justificativas primeiro.")
+        return
 
+    # Verifica se há justificativas do tipo "Folga" e prepara o arquivo
+    tem_folga = any(row.get('Justificativa') == "Folga" for _, row in df.iterrows())
     caminho_folgas = None
 
     if tem_folga:
@@ -1859,12 +2066,10 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
         if not caminho_folgas:
             exibir_log("Nenhum local de salvamento selecionado para o arquivo de folgas. Ignorando folgas.")
             tem_folga = False
-    else:
-        exibir_log("Nenhuma justificativa de folga encontrada. Ignorando geração do arquivo de folgas.")
 
     if tem_folga and caminho_folgas:
         with open(caminho_folgas, "w") as arquivo_folgas:
-            for index, row in df.iterrows():
+            for _, row in df.iterrows():
                 if cancelar and cancelar.is_set():
                     exibir_log("Envio de justificativas cancelado pelo usuário.")
                     return
@@ -1876,10 +2081,7 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
 
                 if descricao_justificativa == "Folga":
                     try:
-                        if isinstance(data, datetime):
-                            data_formatada = data.strftime("%Y-%m-%d")
-                        else:
-                            data_formatada = datetime.strptime(str(data), "%d/%m/%Y").strftime("%Y-%m-%d")
+                        data_formatada = datetime.strptime(str(data), "%d/%m/%Y").strftime("%Y-%m-%d")
                     except ValueError:
                         exibir_log(f"Data inválida para matrícula {matricula}. Ignorando.")
                         continue
@@ -1892,13 +2094,14 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
                     linha_folga = (
                         f"{str(matricula).ljust(16)}"
                         f"{str(pis).ljust(23)}"
-                        f"{data.ljust(12)}"
+                        f"{data_formatada.ljust(12)}"
                         f"{str(cpf).ljust(11)}\n"
                     )
                     arquivo_folgas.write(linha_folga)
                     exibir_log(f"Folga registrada para matrícula {matricula} no dia {data}.")
 
-    for index, row in df.iterrows():
+    # Processa as demais justificativas
+    for _, row in df.iterrows():
         if cancelar and cancelar.is_set():
             exibir_log("Envio de justificativas cancelado pelo usuário.")
             return
@@ -1908,16 +2111,20 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
         data = row.get('Data')
         qtd_horas = row.get('Qtd Horas')
 
+        # Ignorar justificativas inválidas ou folgas (já processadas acima)
         if not descricao_justificativa or pd.isna(descricao_justificativa) or descricao_justificativa == "Folga":
             continue
 
         try:
-            if isinstance(data, datetime):
-                data_formatada = data.strftime("%Y-%m-%d")
-            else:
-                data_formatada = datetime.strptime(str(data), "%d/%m/%Y").strftime("%Y-%m-%d")
+            data_formatada = datetime.strptime(str(data), "%d/%m/%Y").strftime("%Y-%m-%d")
         except ValueError:
             exibir_log(f"Data inválida para matrícula {matricula}. Ignorando.")
+            continue
+
+        # Relaciona a descrição com o ID da justificativa
+        id_justificativa = ids_justificativas.get(descricao_justificativa)
+        if id_justificativa is None:
+            exibir_log(f"Justificativa '{descricao_justificativa}' não encontrada. Ignorando.")
             continue
 
         qtd_horas = validar_horas(qtd_horas)
@@ -1927,13 +2134,10 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
             exibir_log(f"ID do funcionário ausente para matrícula {matricula}. Ignorando linha.")
             continue
 
-        id_justificativa = ids_justificativas.get(descricao_justificativa)
-        if id_justificativa is None:
-            exibir_log(f"Justificativa '{descricao_justificativa}' não encontrada. Ignorando.")
-            continue
-
+        # Envia a justificativa
         enviar_justificativa(matricula, id_funcionario, id_justificativa, descricao_justificativa, data_formatada, qtd_horas)
 
+        # Atualiza a barra de progresso
         if barra and not cancelar.is_set():
             barra.step(1)
             barra.update_idletasks()
@@ -2064,9 +2268,10 @@ def abrir_popup_selecao_pessoas():
     }
     
     selecoes_envio = {
-        "Envio de Ferias": [tk.BooleanVar(), envio_planilha_ferias],
+        "Marcar Ferias": [tk.BooleanVar(), envio_planilha_ferias],
+        "Marcar Desligamento": [tk.BooleanVar(), envio_planilha_desligamento],
         "Envio Marcação D-REP (JSON)": [tk.BooleanVar(), processar_marcacoes_com_cpf],
-        "Marcar Desligamento": [tk.BooleanVar(), envio_planilha_desligamento]
+        "Cadastrar Cargos": [tk.BooleanVar(), cadastro_cargo]
     }
 
     for i, (nome, (var, _)) in enumerate(selecoes_pessoas.items()):
@@ -2077,7 +2282,7 @@ def abrir_popup_selecao_pessoas():
         ttk.Checkbutton(frame_envio, text=nome, variable=var).grid(row=i, column=0, sticky="w", padx=10, pady=5)
 
     # Botão de iniciar coleta
-    ttk.Button(frame_popup, text="Iniciar Processo", command=lambda: iniciar_coleta({**selecoes_pessoas, **selecoes_envio}, popup), bootstyle="success"
+    ttk.Button(frame_popup, text="Iniciar Processo", command=lambda: iniciar_envio({**selecoes_pessoas, **selecoes_envio}, popup), bootstyle="success"
         ).pack(pady=10)
     
     # Configurar o fechamento do popup
@@ -2112,7 +2317,8 @@ def abrir_popup_selecao_coleta():
         "Coletar Plan. Cadastro": [tk.BooleanVar(), coleta_empresa],
         "Coletar Pessoas Para Alt.": [tk.BooleanVar(), alteracao_pessoas],
         "Coletar Pessoas Para Ferias": [tk.BooleanVar(), coleta_planilha_ferias],
-        "Coletar Pessoas para Desligamento": [tk.BooleanVar(), coleta_planilha_desligamento]
+        "Coletar Pessoas para Desligamento": [tk.BooleanVar(), coleta_planilha_desligamento],
+        "Coletar Plan. Cargos": [tk.BooleanVar(), coleta_cargos]
     }
 
     # Adicionar checkbuttons para as coletas de planilhas
@@ -2217,7 +2423,7 @@ root.rowconfigure(0, weight=1)
 frame_campos = ttk.Frame(frame_selecao)
 frame_campos.grid(row=0, column=0, pady=10, padx=10)
 
-ttk.Label(root, text="Versão 0.7",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+ttk.Label(root, text="Versão 0.8 (Teste)",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
 #Seleção do arquivo de empresa
 
