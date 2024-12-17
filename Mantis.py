@@ -1963,7 +1963,7 @@ def funcao_justificativa_get():
     popup_futuro = tk.Toplevel(root)
     popup_futuro.title("Seleção de Justificativas")
     popup_futuro.geometry("400x380")
-    popup_futuro.iconbitmap("LogoPreta.ico")
+    popup_futuro.iconbitmap("Mantis.ico")
 
     canvas = tk.Canvas(popup_futuro)
     scrollbar = ttk.Scrollbar(popup_futuro, orient="vertical", command=canvas.yview)
@@ -2313,7 +2313,7 @@ def abrir_popup_selecao_pessoas():
     popup = ttk.Toplevel(root)
     popup.title("Selecione a função de envio")
     popup.geometry("500x400")
-    popup.iconbitmap("LogoPreta.ico")
+    popup.iconbitmap("Mantis.ico")
     
     frame_popup = ttk.Frame(popup)
     frame_popup.pack(expand=True, fill="both", padx=10, pady=10)
@@ -2357,7 +2357,7 @@ def abrir_popup_selecao_coleta():
     popup = ttk.Toplevel(root)
     popup.title("Selecione a planilha a coletar")
     popup.geometry("500x400")
-    popup.iconbitmap("LogoPreta.ico")
+    popup.iconbitmap("Mantis.ico")
     
     # Frame principal
     frame_popup = ttk.Frame(popup)
@@ -2409,7 +2409,7 @@ def mostrar_duas_barras_progresso_paralelo(funcao1, funcao2, df, titulo="Process
     janela.title(titulo)
     janela.geometry("400x250")
     janela.resizable(False, False)
-    janela.iconbitmap("LogoPreta.ico")
+    janela.iconbitmap("Mantis.ico")
 
     cancelar = threading.Event()
     
@@ -2527,7 +2527,7 @@ def alterar_tema(sistema):
 
 root = ttk.Window(themename="darkly")
 root.title("Mantis - Kairos")
-root.iconbitmap("LogoPreta.ico")
+root.iconbitmap("Mantis.ico")
 
 style = ttk.Style("temamantis-kairos") #Tema Personalidado (Alterar em caso de troca de sistema)
 
@@ -2547,7 +2547,7 @@ root.rowconfigure(0, weight=1)
 frame_campos = ttk.Frame(frame_selecao)
 frame_campos.grid(row=0, column=0, pady=10, padx=10)
 
-ttk.Label(root, text="Versão 1.0",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+ttk.Label(root, text="Versão 0.8",).grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
 # Seletor da API
 frame_api = ttk.Frame(frame_campos)
