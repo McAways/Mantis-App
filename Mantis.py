@@ -93,8 +93,8 @@ def coleta_planilha_marcacoes_faltantes():
                     for entrada in item['Entradas']:
                         data_limpa = clean_json_date(entrada['Data'])
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
+                        justificativa_existente = entrada.get('Justificativa', '').strip()
                         entradas_por_data[entrada_data_formatada] = entrada
-
                     for date in full_date_range:
                         if date in entradas_por_data:
                             entrada = entradas_por_data[date]
@@ -104,7 +104,8 @@ def coleta_planilha_marcacoes_faltantes():
                                 'Apontamentos': entrada['Apontamentos'],
                                 'HTrab': entrada['HTrab'],
                                 'Descontos': entrada['Descontos'],
-                                'Debito': entrada['Debito']
+                                'Debito': entrada['Debito'],
+                                'Justificativa': justificativa_existente
                             }
                         else:
                             entry_data = {
@@ -126,7 +127,6 @@ def coleta_planilha_marcacoes_faltantes():
                     print("Nenhuma falta identificada.")
 
                 final_df = faltas
-                final_df['Justificativa'] = ''
                 final_df['Qtd Horas'] = ''
                 final_df['Entrada'] = ''
                 final_df['Almoço Ida'] = ''
@@ -253,7 +253,7 @@ def coleta_planilha_marcacoes_inconsistencia():
                     for entrada in item['Entradas']:
                         data_limpa = clean_json_date(entrada['Data'])
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
-
+                        justificativa_existente = entrada.get('Justificativa', '').strip()
                         marcacoes_impares = filtra_marcacoes_impares_e_htrab_vazio([entrada])
                         if marcacoes_impares:
                             for marcacao in marcacoes_impares:
@@ -263,7 +263,9 @@ def coleta_planilha_marcacoes_inconsistencia():
                                     'Apontamentos': marcacao['Apontamentos'],
                                     'HTrab': entrada['HTrab'],
                                     'Desconto': entrada['Descontos'],
-                                    'Debito': entrada['Debito']
+                                    'Debito': entrada['Debito'],
+                                    'Justificativa': justificativa_existente
+                                    
                                 }
                                 combined_data = {**fixed_data, **entry_data}
                                 all_entries.append(combined_data)
@@ -271,7 +273,6 @@ def coleta_planilha_marcacoes_inconsistencia():
                 if all_entries:
                     final_df = pd.DataFrame(all_entries)
 
-                    final_df['Justificativa'] = ''
                     final_df['Qtd Horas'] = ''
                     final_df['Entrada'] = ''
                     final_df['Almoço Ida'] = ''
@@ -401,6 +402,7 @@ def coleta_planilha_marcacoes_incomum():
                     for entrada in item['Entradas']:
                         data_limpa = clean_json_date(entrada['Data'])
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
+                        justificativa_existente = entrada.get('Justificativa', '').strip()
 
                         entry_data = {
                             'Data': entrada_data_formatada.strftime("%d/%m/%Y"),
@@ -408,15 +410,14 @@ def coleta_planilha_marcacoes_incomum():
                             'Apontamentos': entrada['Apontamentos'],
                             'HTrab': entrada['HTrab'],
                             'Desconto': entrada['Descontos'],
-                            'Debito': entrada['Debito']
+                            'Debito': entrada['Debito'],
+                            'Justificativa': justificativa_existente
                         }
                         combined_data = {**fixed_data, **entry_data}
                         all_entries.append(combined_data)
 
                 if all_entries:
                     final_df = pd.DataFrame(all_entries)
-                    
-                    final_df['Justificativa'] = ''
                     final_df['Qtd Horas'] = ''
                     final_df['Entrada'] = ''
                     final_df['Almoço Ida'] = ''
@@ -551,6 +552,7 @@ def coleta_planilha_marcacoes():
                         entrada_data_formatada = datetime.strptime(data_limpa, "%d/%m/%Y")
                         entradas_por_data[entrada_data_formatada] = entrada
                     for date in full_date_range:
+                        justificativa_existente = entrada.get('Justificativa', '').strip()
                         if date in entradas_por_data:
                             entrada = entradas_por_data[date]
                             entry_data = {
@@ -559,20 +561,21 @@ def coleta_planilha_marcacoes():
                                 'Apontamentos': entrada['Apontamentos'],
                                 'HTrab': entrada['HTrab'],
                                 'Desconto': entrada['Descontos'],
-                                'Debito': entrada['Debito']
+                                'Debito': entrada['Debito'],
+                                'Justificativa': justificativa_existente
                             }
                         else:
                             entry_data = {
                                 'Data': date.strftime("%d/%m/%Y"),
                                 'Horario': '',
-                                'Apontamentos': ''
+                                'Apontamentos': '',
+                                'Justificativa': ''
                             }
 
                         combined_data = {**fixed_data, **entry_data}
                         all_entries.append(combined_data)
 
                 final_df = pd.DataFrame(all_entries)
-                final_df['Justificativa'] = ''
                 final_df['Qtd Horas'] = ''
                 final_df['Entrada'] = ''
                 final_df['Almoço Ida'] = ''
@@ -1708,7 +1711,6 @@ def processar_marcacoes_com_cpf():
     for registro in registros:
         cpf = registro.get("Cpf", "").zfill(11).replace(".", "").replace("-", "")
         dt_hr = registro.get("DtHr", "")
-        on = registro.get("On", False)
 
         # Validação básica
         if not cpf or not dt_hr:
@@ -1722,43 +1724,46 @@ def processar_marcacoes_com_cpf():
             print(f"DataHora inválida: {dt_hr} para CPF {cpf}")
             continue
 
-        # Buscar credencial pelo CPF
+        # Buscar matrícula pelo CPF
         try:
-            response = requests.post(url_search, json={"Cpf": cpf}, headers=headers)
+            payload_search = {"Cpf": cpf}
+            response = requests.post(url_search, json=payload_search, headers=headers)
             response_data = response.json()
+
             if not response_data.get("Sucesso", False):
                 print(f"Erro ao buscar CPF {cpf}: {response_data.get('Mensagem', 'Erro desconhecido')}")
                 continue
 
-            # Extrair credencial
+            # Encontrar matrícula associada ao CPF
             pessoas = response_data.get("Obj", [])
-            if not pessoas:
-                print(f"Nenhum registro encontrado para CPF {cpf}")
+            matricula_encontrada = None
+            for pessoa in pessoas:
+                if pessoa.get("Cpf", "").replace(".", "").replace("-", "") == cpf:
+                    matricula_encontrada = pessoa.get("Matricula", "")
+                    break
+
+            if not matricula_encontrada:
+                print(f"Matrícula não encontrada para CPF {cpf}")
                 continue
 
-            credencial = pessoas[0].get("Matricula", "")
-            if not credencial:
-                print(f"Credencial não encontrada para CPF {cpf}")
-                continue
-
-            # Enviar marcação
-            payload = {
-                "Matricula": credencial,
+            # Enviar marcação usando a matrícula e DataHora do arquivo JSON
+            payload_punch = {
+                "Matricula": matricula_encontrada,
                 "DataHoraApontamento": dt_hr_formatado,
                 "CpfResponsavel": dados_selecionados["CPF Responsável"],
                 "ResponseType": "AS400V1"
             }
-            punch_response = requests.post(url_punch, json=payload, headers=headers)
+            punch_response = requests.post(url_punch, json=payload_punch, headers=headers)
             punch_data = punch_response.json()
 
             if punch_data.get("Sucesso", False):
-                print(f"Marcação enviada com sucesso para CPF {cpf}, DataHora: {dt_hr_formatado}")
+                print(f"Marcação enviada com sucesso para CPF {cpf}, Matrícula {matricula_encontrada}, DataHora: {dt_hr_formatado}")
             else:
                 print(f"Erro ao enviar marcação para CPF {cpf}: {punch_data.get('Mensagem', 'Erro desconhecido')}")
 
         except Exception as e:
             print(f"Erro ao processar CPF {cpf}: {e}")
-
+    
 def filtra_marcacoes_impares_e_htrab_vazio(entradas):
     marcacoes_filtradas = []
 
@@ -2157,7 +2162,7 @@ def processar_arquivo_excel(df, barra=None, label_status=None, cancelar=None):
                     linha_folga = (
                         f"{str(matricula).ljust(16)}"
                         f"{str(pis).ljust(23)}"
-                        f"{data_formatada.ljust(12)}"
+                        f"{str(data).ljust(12)}"
                         f"{str(cpf).ljust(11)}\n"
                     )
                     arquivo_folgas.write(linha_folga)
