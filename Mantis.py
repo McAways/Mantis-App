@@ -692,8 +692,8 @@ def coleta_empresa():
     
     final_df = combined_df[selected_columns]
     
-    first_sheet_df = pd.DataFrame(columns=["Matricula", "Cracha", "Nome Completo", "CPF", "Email", "Admissão", "Nascimento", "Base de Horas",
-                                        "Estrutura", "Horário", "Cálculo", "Cargo", "Possui PIS?", "PIS", "Sexo", "Campo Alternativo"])
+    first_sheet_df = pd.DataFrame(columns=["Matricula", "Cracha", "Nome Completo", "CPF", "RG","Email", "Admissão", "Nascimento", "Base de Horas",
+        "Estrutura", "Horário", "Cálculo", "Cargo", "Possui PIS?", "PIS", "Sexo", "Campo Alternativo", "Endereço", "Número", "Bairro", "Cidade", "Estado", "Pais"])
 
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         first_sheet_df.to_excel(writer, sheet_name='Cadastro', index=False)
@@ -1262,6 +1262,7 @@ def cadastrar_pessoas():
             Cracha = row['Cracha']
             Nome = row['Nome Completo']
             Cpf = str(row['CPF']).zfill(11)
+            Rg = row.get('RG', None)
             Email = row.get('Email', None)
             DataAdm = pd.to_datetime(row["Admissão"]).strftime('%d-%m-%Y')
             try:
@@ -1277,7 +1278,13 @@ def cadastrar_pessoas():
             Sexo = row['Sexo']
             Cargo = row.get('Cargo', None)
             CampoAlternativo = row.get('Campo Alternativo', None)
-            
+            Endereço = row.get('Endereço', None)
+            Numero = row.get('Número', None)
+            Bairro = row.get('Bairro', None)
+            Cidade = row.get('Cidade', None)
+            Estado = row.get('Estado', None)
+            Pais = row.get('Pais', None)
+                        
             if pd.notna(Cargo):
                 Cargo = str(int(float(Cargo))) if isinstance(Cargo, (float, int)) else str(Cargo)
 
@@ -1311,8 +1318,28 @@ def cadastrar_pessoas():
                 "FlagGerarNumeroPISAutomatico": bool(PisAuto == 0),
                 "Sexo": Sexo
             }
+            if pd.notna(Endereço):
+                payload["Rua"] = Endereço
+                
+            if pd.notna(Numero):
+                payload["NumeroAndar"] = Numero
+                
+            if pd.notna(Bairro):
+                payload["Bairro"] = Bairro
             
-            if pd.notna(DataNasc):  # Adicionar DataNascimento somente se estiver presente
+            if pd.notna(Cidade):
+                payload["Cidade"] = Cidade
+                
+            if pd.notna(Estado):
+                payload["Estado"] = Estado
+                
+            if pd.notna(Pais):
+                payload["Pais"] = Pais
+            
+            if pd.notna(Rg):
+                payload["Rg"] = DataNasc
+            
+            if pd.notna(DataNasc):
                 payload["DataNascimento"] = DataNasc
 
             if pd.notna(Email):
